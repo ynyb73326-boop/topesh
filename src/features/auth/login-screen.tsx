@@ -24,6 +24,12 @@ import { useRouter } from "next/navigation"
 import { motion, AnimatePresence, useReducedMotion } from "motion/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  requestManagerOtp,
+  signInTeamLeader,
+  verifyManagerOtp,
+} from "@/features/auth/actions"
+import { useDevSession } from "@/features/dev-role/dev-session"
 import { devRoleSwitcherEnabled } from "@/features/dev-role/users"
 import { he } from "@/i18n/he"
 import { cn } from "cn"
@@ -46,6 +52,7 @@ function isValidIdentity(value: string) {
 
 export function LoginScreen() {
   const router = useRouter()
+  const session = useDevSession()
   const reduce = useReducedMotion()
   const [role, setRole] = useState<AuthRole>("manager")
   const [step, setStep] = useState<AuthStep>("main")
@@ -53,19 +60,37 @@ export function LoginScreen() {
   const [identity, setIdentity] = useState("")
   const [otp, setOtp] = useState<string[]>(() => Array.from({ length: OTP_LENGTH }, () => ""))
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   const [year, setYear] = useState<number | null>(null)
 
   useEffect(() => {
     setYear(new Date().getFullYear())
   }, [])
 
+  useEffect(() => {
+    if (!session.ready || !session.role) return
+    router.replace(session.role === "manager" ? "/manager" : "/leader")
+  }, [router, session.ready, session.role])
+
+  // After logout (or cold open without session), always show the main login step.
+  useEffect(() => {
+    if (!session.ready || session.role) return
+    setStep("main")
+    setOtp(Array.from({ length: OTP_LENGTH }, () => ""))
+    setEmail("")
+    setIdentity("")
+    setError(null)
+    setPending(false)
+  }, [session.ready, session.role])
+
   const goMain = () => {
     setStep("main")
     setOtp(Array.from({ length: OTP_LENGTH }, () => ""))
     setError(null)
+    setPending(false)
   }
 
-  const onManagerContinue = (event: FormEvent) => {
+  const onManagerContinue = async (event: FormEvent) => {
     event.preventDefault()
     const value = email.trim()
     if (!value) {
@@ -76,11 +101,18 @@ export function LoginScreen() {
       setError(he.auth.emailInvalid)
       return
     }
+    setPending(true)
     setError(null)
+    const result = await requestManagerOtp(value)
+    setPending(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
     setStep("otp")
   }
 
-  const onLeaderSignIn = (event: FormEvent) => {
+  const onLeaderSignIn = async (event: FormEvent) => {
     event.preventDefault()
     const value = identity.trim()
     if (!value) {
@@ -91,18 +123,45 @@ export function LoginScreen() {
       setError(he.auth.identityInvalid)
       return
     }
+    setPending(true)
     setError(null)
-    // UI only — auth wiring comes later.
+    const result = await signInTeamLeader(value)
+    if (!result.ok) {
+      setPending(false)
+      setError(result.error)
+      return
+    }
+    await session.refreshAuth()
+    setPending(false)
+    router.replace("/leader")
   }
 
-  const onOtpVerify = (event: FormEvent) => {
+  const onOtpVerify = async (event: FormEvent) => {
     event.preventDefault()
-    if (otp.join("").length !== OTP_LENGTH) {
+    const code = otp.join("")
+    if (code.length !== OTP_LENGTH) {
       setError(he.auth.otpIncomplete)
       return
     }
+    setPending(true)
     setError(null)
-    // UI only — Supabase OTP verification comes later.
+    const result = await verifyManagerOtp(email.trim(), code)
+    if (!result.ok) {
+      setPending(false)
+      setError(result.error)
+      return
+    }
+    await session.refreshAuth()
+    setPending(false)
+    router.replace("/manager")
+  }
+
+  const onOtpResend = async () => {
+    setPending(true)
+    setError(null)
+    const result = await requestManagerOtp(email.trim())
+    setPending(false)
+    if (!result.ok) setError(result.error)
   }
 
   return (
@@ -172,8 +231,13 @@ export function LoginScreen() {
                           />
                         </Field>
                         {error ? <ErrorText>{error}</ErrorText> : null}
-                        <Button type="submit" size="touch" className="h-12 w-full gap-2 rounded-xl text-base">
-                          {he.auth.continue}
+                        <Button
+                          type="submit"
+                          size="touch"
+                          className="h-12 w-full gap-2 rounded-xl text-base"
+                          disabled={pending}
+                        >
+                          {pending ? he.auth.sendingOtp : he.auth.continue}
                           <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
                         </Button>
                       </motion.form>
@@ -210,8 +274,13 @@ export function LoginScreen() {
                           />
                         </Field>
                         {error ? <ErrorText>{error}</ErrorText> : null}
-                        <Button type="submit" size="touch" className="h-12 w-full gap-2 rounded-xl text-base">
-                          {he.auth.signIn}
+                        <Button
+                          type="submit"
+                          size="touch"
+                          className="h-12 w-full gap-2 rounded-xl text-base"
+                          disabled={pending}
+                        >
+                          {pending ? he.auth.signingIn : he.auth.signIn}
                           <ArrowRight className="size-4 rtl:rotate-180" aria-hidden />
                         </Button>
                       </motion.form>
@@ -277,14 +346,21 @@ export function LoginScreen() {
                     />
                   </div>
                   {error ? <ErrorText className="text-center">{error}</ErrorText> : null}
-                  <Button type="submit" size="touch" className="h-12 w-full rounded-xl text-base">
-                    {he.auth.otpVerify}
+                  <Button
+                    type="submit"
+                    size="touch"
+                    className="h-12 w-full rounded-xl text-base"
+                    disabled={pending}
+                  >
+                    {pending ? he.auth.signingIn : he.auth.otpVerify}
                   </Button>
                   <p className="text-center text-sm text-muted-foreground">
                     {he.auth.otpResendHint}{" "}
                     <button
                       type="button"
-                      className="pressable font-medium text-primary underline-offset-4 hover:underline"
+                      className="pressable font-medium text-primary underline-offset-4 hover:underline disabled:opacity-50"
+                      disabled={pending}
+                      onClick={() => void onOtpResend()}
                     >
                       {he.auth.otpResend}
                     </button>

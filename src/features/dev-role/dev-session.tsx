@@ -2,14 +2,21 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react"
 import type { Role, User } from "@/domain/types"
 import { MOCK_DB_KEY } from "@/data/repository"
+import { createBrowserSupabaseClient } from "@/data/supabase/browser"
+import { isAuthEnabled } from "@/data/supabase/env"
 import { uriUser } from "@/data/catalog"
+import { signOutAuth } from "@/features/auth/actions"
+import { loadAuthSession } from "@/features/auth/session"
 import {
   DEV_ROLE_STORAGE_KEY,
   DEV_USER_STORAGE_KEY,
@@ -24,9 +31,11 @@ let storeRevision = 0
 type DevSession = {
   role: Role | null
   user: User | null
+  ready: boolean
   setManager: (userId?: string) => void
   setTeamLeader: (userId: string) => void
-  clearRole: () => void
+  clearRole: () => Promise<void>
+  refreshAuth: () => Promise<void>
 }
 
 const DevSessionContext = createContext<DevSession | null>(null)
@@ -108,33 +117,120 @@ function isStoredUser(value: unknown): value is User {
   )
 }
 
-function resolveSession(token: string): { role: Role | null; user: User | null } {
+function resolveDevSession(token: string): { role: Role | null; user: User | null } {
   const [role, userId] = token.split("|")
   if (role === "manager") return { role, user: resolveManager(userId) }
-  if (role === "teamLeader") {
-    return { role, user: resolveLeader(userId) }
-  }
+  if (role === "teamLeader") return { role, user: resolveLeader(userId) }
   return { role: null, user: null }
 }
 
-export function DevSessionProvider({ children }: { children: ReactNode }) {
+function AuthBackedSessionProvider({ children }: { children: ReactNode }) {
+  const [role, setRole] = useState<Role | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [ready, setReady] = useState(false)
+
+  const refreshAuth = useCallback(async (opts?: { allowClear?: boolean }) => {
+    const allowClear = opts?.allowClear ?? true
+    try {
+      const session = await loadAuthSession()
+      if (session) {
+        setRole(session.role)
+        setUser(session.user)
+      } else if (allowClear) {
+        setRole(null)
+        setUser(null)
+      }
+    } catch (error) {
+      // Network blip / temporary Auth error: keep the last known session.
+      console.error("[auth] refreshAuth failed:", error)
+    } finally {
+      setReady(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshAuth()
+  }, [refreshAuth])
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setRole(null)
+        setUser(null)
+        setReady(true)
+        return
+      }
+      // TOKEN_REFRESHED / SIGNED_IN / INITIAL_SESSION / USER_UPDATED
+      void refreshAuth({ allowClear: event === "SIGNED_IN" })
+    })
+    return () => subscription.unsubscribe()
+  }, [refreshAuth])
+
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState !== "visible") return
+      void refreshAuth({ allowClear: false })
+    }
+    document.addEventListener("visibilitychange", onResume)
+    window.addEventListener("focus", onResume)
+    return () => {
+      document.removeEventListener("visibilitychange", onResume)
+      window.removeEventListener("focus", onResume)
+    }
+  }, [refreshAuth])
+
+  const value = useMemo<DevSession>(
+    () => ({
+      role,
+      user,
+      ready,
+      setManager: () => undefined,
+      setTeamLeader: () => undefined,
+      clearRole: async () => {
+        try {
+          await signOutAuth()
+        } finally {
+          setRole(null)
+          setUser(null)
+          writeSession(null, null)
+        }
+      },
+      refreshAuth: () => refreshAuth({ allowClear: true }),
+    }),
+    [ready, refreshAuth, role, user]
+  )
+
+  return <DevSessionContext.Provider value={value}>{children}</DevSessionContext.Provider>
+}
+
+function DevSwitcherSessionProvider({ children }: { children: ReactNode }) {
   const token = useSyncExternalStore(subscribe, readSessionToken, () => "")
   const value = useMemo<DevSession>(() => {
-    const session = resolveSession(token)
+    const session = resolveDevSession(token)
     return {
       role: session.role,
       user: session.user,
+      ready: true,
       setManager: (userId) => writeSession("manager", userId ?? devManager.id),
       setTeamLeader: (userId) => writeSession("teamLeader", userId),
-      clearRole: () => writeSession(null, null),
+      clearRole: async () => {
+        writeSession(null, null)
+      },
+      refreshAuth: async () => {},
     }
   }, [token])
 
-  return (
-    <DevSessionContext.Provider value={value}>
-      {children}
-    </DevSessionContext.Provider>
-  )
+  return <DevSessionContext.Provider value={value}>{children}</DevSessionContext.Provider>
+}
+
+export function DevSessionProvider({ children }: { children: ReactNode }) {
+  if (isAuthEnabled()) {
+    return <AuthBackedSessionProvider>{children}</AuthBackedSessionProvider>
+  }
+  return <DevSwitcherSessionProvider>{children}</DevSwitcherSessionProvider>
 }
 
 export function useDevSession() {

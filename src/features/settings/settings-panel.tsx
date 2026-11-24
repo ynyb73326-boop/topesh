@@ -94,9 +94,12 @@ export function SettingsBody({
   const user = session.user
 
   const logout = () => {
-    session.clearRole()
-    onAfterLogout?.()
-    router.replace("/")
+    void (async () => {
+      await session.clearRole()
+      onAfterLogout?.()
+      router.replace("/")
+      router.refresh()
+    })()
   }
 
   return (

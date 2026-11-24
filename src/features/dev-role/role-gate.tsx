@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import type { Role } from "@/domain/types"
+import { isAuthEnabled } from "@/data/supabase/env"
 import { useDevSession, useHasHydrated } from "@/features/dev-role/dev-session"
 import { devRoleSwitcherEnabled } from "@/features/dev-role/users"
 import { he } from "@/i18n/he"
@@ -17,13 +18,22 @@ export function RoleGate({
   const router = useRouter()
   const session = useDevSession()
   const hydrated = useHasHydrated()
+  const authMode = isAuthEnabled()
 
   useEffect(() => {
-    if (!devRoleSwitcherEnabled || !hydrated) return
+    if (!hydrated || !session.ready) return
     if (session.role !== role) router.replace("/")
-  }, [hydrated, role, router, session.role])
+  }, [hydrated, role, router, session.ready, session.role])
 
-  if (!devRoleSwitcherEnabled) return <HoldingScreen />
+  if (!authMode && !devRoleSwitcherEnabled) return <HoldingScreen />
+  if (!session.ready) {
+    return (
+      <main className="mx-auto flex min-h-dvh w-full max-w-md items-center justify-center px-4">
+        <p className="text-sm text-muted-foreground">{he.auth.signingIn}</p>
+      </main>
+    )
+  }
+  if (session.role !== role) return null
   return children
 }
 
