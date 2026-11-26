@@ -71,6 +71,20 @@ async function ensureAuthUserForProfile(input: {
   return data.user.id
 }
 
+function authConfigErrorMessage(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error ?? "")
+  if (/SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY/i.test(message)) {
+    return he.auth.missingServiceRole
+  }
+  if (/NEXT_PUBLIC_SUPABASE/i.test(message)) {
+    return he.auth.missingSupabasePublic
+  }
+  if (/GMAIL_USER|GMAIL_APP_PASSWORD/i.test(message)) {
+    return he.auth.missingGmail
+  }
+  return null
+}
+
 export async function requestManagerOtp(emailRaw: string): Promise<AuthActionResult> {
   try {
     const email = normalizeEmail(emailRaw)
@@ -85,7 +99,10 @@ export async function requestManagerOtp(emailRaw: string): Promise<AuthActionRes
       .eq("email", email)
       .maybeSingle()
 
-    if (error) return { ok: false, error: he.auth.genericError }
+    if (error) {
+      console.error("[auth] manager profile lookup:", error.message)
+      return { ok: false, error: he.auth.genericError }
+    }
     if (!profile?.email) return { ok: false, error: he.auth.managerNotFound }
 
     await ensureAuthUserForProfile({
@@ -110,7 +127,7 @@ export async function requestManagerOtp(emailRaw: string): Promise<AuthActionRes
     return sendManagerOtpEmail({ to: profile.email, code })
   } catch (error) {
     console.error("[auth] requestManagerOtp failed:", error)
-    return { ok: false, error: he.auth.genericError }
+    return { ok: false, error: authConfigErrorMessage(error) ?? he.auth.genericError }
   }
 }
 
@@ -173,7 +190,10 @@ export async function signInTeamLeader(identityRaw: string): Promise<AuthActionR
       .eq("identity_number", identity)
       .maybeSingle()
 
-    if (error) return { ok: false, error: he.auth.genericError }
+    if (error) {
+      console.error("[auth] leader profile lookup:", error.message)
+      return { ok: false, error: he.auth.genericError }
+    }
     if (!profile) return { ok: false, error: he.auth.leaderNotFound }
 
     const email = profile.email?.trim() || leaderSyntheticEmail(identity)
@@ -189,6 +209,7 @@ export async function signInTeamLeader(identityRaw: string): Promise<AuthActionR
       email,
     })
     if (linkError || !linkData.properties?.hashed_token) {
+      console.error("[auth] leader generateLink failed:", linkError?.message)
       return { ok: false, error: he.auth.genericError }
     }
 
@@ -197,11 +218,15 @@ export async function signInTeamLeader(identityRaw: string): Promise<AuthActionR
       type: "email",
       token_hash: linkData.properties.hashed_token,
     })
-    if (verifyError) return { ok: false, error: he.auth.genericError }
+    if (verifyError) {
+      console.error("[auth] leader verifyOtp failed:", verifyError.message)
+      return { ok: false, error: he.auth.genericError }
+    }
 
     return { ok: true }
-  } catch {
-    return { ok: false, error: he.auth.genericError }
+  } catch (error) {
+    console.error("[auth] signInTeamLeader failed:", error)
+    return { ok: false, error: authConfigErrorMessage(error) ?? he.auth.genericError }
   }
 }
 

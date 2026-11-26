@@ -18,10 +18,7 @@ export async function sendManagerOtpEmail(input: {
   if (!user || !pass) {
     return {
       ok: false,
-      error:
-        process.env.NODE_ENV === "development"
-          ? `${he.auth.otpSendFailed} (חסר GMAIL_USER / GMAIL_APP_PASSWORD ב-.env.local)`
-          : he.auth.otpSendFailed,
+      error: he.auth.missingGmail,
     }
   }
 

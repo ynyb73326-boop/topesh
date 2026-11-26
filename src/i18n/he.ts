@@ -522,6 +522,12 @@ export const he = {
     managerNotFound: "כתובת המייל לא נמצאה ברשימת המנהלים.",
     leaderNotFound: "מספר תעודת הזהות לא נמצא ברשימת ראשי הצוות.",
     genericError: "אירעה שגיאה. נסו שוב.",
+    missingServiceRole:
+      "חסר SUPABASE_SERVICE_ROLE_KEY ב־Vercel. הוסיפו ב־Environment Variables ואז Redeploy.",
+    missingGmail:
+      "חסרים GMAIL_USER / GMAIL_APP_PASSWORD ב־Vercel. הוסיפו ואז Redeploy.",
+    missingSupabasePublic:
+      "חסרים NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY ב־Vercel.",
     signingIn: "מתחברים…",
     sendingOtp: "שולחים קוד…",
     footer: "ט.י טופ אש בע״מ",
