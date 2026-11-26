@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { PageFrame } from "@/components/motion/page-frame"
 import { AppLink } from "@/components/shell/app-link"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { DataLoading } from "@/components/shell/data-loading"
 import { LeaderStoreError } from "@/features/leader/leader-states"
 import { Field, fieldClass } from "@/features/manager/fields"
 import { he } from "@/i18n/he"
+import { withSavingToast } from "@/lib/saving-toast"
 import { formatDateTime, formatQuantity, formatWorkDate } from "@/lib/format"
 import { BidiText } from "@/lib/bidi"
 
@@ -95,22 +97,35 @@ function DiaryDetail({
   const sites = db.sites
 
   const save = async () => {
-    const result = await updateManagerDiary(diary.id, {
-      teamLeaderId: leaderId,
-      workDate,
-      companyId,
-      customerId,
-      siteId,
-      subSiteName,
-      projectName,
-      workOrderNumber: workOrder,
-      accompanyingTechnicianId: technicianId || null,
-    })
+    const result = await withSavingToast(
+      () =>
+        updateManagerDiary(diary.id, {
+          teamLeaderId: leaderId,
+          workDate,
+          companyId,
+          customerId,
+          siteId,
+          subSiteName,
+          projectName,
+          workOrderNumber: workOrder,
+          accompanyingTechnicianId: technicianId || null,
+        }),
+      {
+        loading: he.feedback.saving,
+        success: he.manager.panel.saved,
+        error: false,
+      }
+    )
     setError(!result.ok)
+    if (!result.ok) toast.error(he.manager.invalid)
   }
 
   const duplicate = async () => {
-    const result = await duplicateManagerDiary(diary.id)
+    const result = await withSavingToast(() => duplicateManagerDiary(diary.id), {
+      loading: he.feedback.duplicating,
+      success: he.manager.created,
+      error: he.manager.invalid,
+    })
     if (result.ok && "id" in result && result.id) router.push(`/manager/diaries/${result.id}`)
   }
 
@@ -237,7 +252,10 @@ function DiaryDetail({
               size="touch"
               onClick={() => {
                 void (async () => {
-                  const result = await cancelManagerDiary(diary.id)
+                  const result = await withSavingToast(() => cancelManagerDiary(diary.id), {
+                    loading: he.feedback.cancelling,
+                    success: he.manager.panel.cancelled,
+                  })
                   if (result.ok) router.push("/manager")
                 })()
               }}

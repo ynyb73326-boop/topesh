@@ -85,6 +85,7 @@ import { MobileFilterPicker } from "@/features/manager/mobile-filters/picker-ove
 import { exportDiaryExcel } from "@/features/manager/reports/export-diary-excel"
 import { exportDiaryPdf } from "@/features/manager/reports/export-diary-pdf"
 import { he } from "@/i18n/he"
+import { withSavingToast } from "@/lib/saving-toast"
 import { formatDateTime, formatQuantity, formatWorkDate } from "@/lib/format"
 import { BidiText } from "@/lib/bidi"
 import { compareHebrew, sortSelectOptions } from "@/lib/sort"
@@ -284,6 +285,8 @@ function DiaryBody({
   const [error, setError] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
+  const [confirmBusy, setConfirmBusy] = useState(false)
+  const [saveBusy, setSaveBusy] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const missingFields = diary.status === "pending" ? diarySubmitMissing(diary) : []
@@ -306,32 +309,46 @@ function DiaryBody({
   }, [showMissing, highlightedMissing])
 
   const runConfirm = async () => {
-    if (confirm === "delete") {
-      const result = await deleteManagerDiary(diary.id)
-      if (!result.ok) return
-      notice.show(he.manager.panel.deleted)
-      onClose()
-      return
-    }
-    if (confirm === "submit") {
-      const result = await markManagerDiarySubmitted(diary.id)
-      setConfirm(null)
-      if (!result.ok) {
-        setShowMissing(true)
+    if (!confirm || confirmBusy) return
+    setConfirmBusy(true)
+    try {
+      if (confirm === "delete") {
+        const result = await withSavingToast(() => deleteManagerDiary(diary.id), {
+          loading: he.feedback.deleting,
+          success: he.manager.panel.deleted,
+        })
+        if (!result.ok) return
+        onClose()
         return
       }
-      setShowMissing(false)
-      notice.success(he.manager.panel.submitted)
-      return
+      if (confirm === "submit") {
+        const result = await withSavingToast(() => markManagerDiarySubmitted(diary.id), {
+          loading: he.feedback.submitting,
+          success: he.manager.panel.submitted,
+          error: false,
+        })
+        setConfirm(null)
+        if (!result.ok) {
+          setShowMissing(true)
+          toast.error(he.feedback.saveFailed)
+          return
+        }
+        setShowMissing(false)
+        return
+      }
+      const result = await withSavingToast(() => markManagerDiaryCancelled(diary.id), {
+        loading: he.feedback.cancelling,
+        success: he.manager.panel.cancelled,
+      })
+      setConfirm(null)
+      if (!result.ok) return
+    } finally {
+      setConfirmBusy(false)
     }
-    const result = await markManagerDiaryCancelled(diary.id)
-    setConfirm(null)
-    if (!result.ok) return
-    notice.show(he.manager.panel.cancelled)
   }
 
   const save = async () => {
-    if (!draft) return
+    if (!draft || saveBusy) return
     const parsedItems: { id: string; componentId: string; quantity: number }[] = []
     for (const item of draft.items) {
       if (!item.componentId) continue
@@ -342,33 +359,47 @@ function DiaryBody({
       }
       parsedItems.push({ id: item.id, componentId: item.componentId, quantity: parsed })
     }
-    const result = await editManagerDiary(
-      diary.id,
-      {
-        teamLeaderId: draft.teamLeaderId,
-        workDate: diary.workDate,
-        companyId: draft.companyId,
-        customerId: draft.customerId,
-        siteId: draft.siteId,
-        subSiteName: draft.subSiteName,
-        projectName: draft.projectName,
-        workOrderNumber: draft.workOrderNumber,
-        accompanyingTechnicianId: draft.accompanyingTechnicianId || null,
-      },
-      {
-        workers: draft.workers,
-        items: parsedItems,
-        checkedIds: draft.checkedIds,
-        notes: draft.notes,
-        siteManagerName: draft.siteManagerName,
-        siteManagerSignatureDataUrl: draft.siteManagerSignatureDataUrl,
+    setSaveBusy(true)
+    try {
+      const result = await withSavingToast(
+        () =>
+          editManagerDiary(
+            diary.id,
+            {
+              teamLeaderId: draft.teamLeaderId,
+              workDate: diary.workDate,
+              companyId: draft.companyId,
+              customerId: draft.customerId,
+              siteId: draft.siteId,
+              subSiteName: draft.subSiteName,
+              projectName: draft.projectName,
+              workOrderNumber: draft.workOrderNumber,
+              accompanyingTechnicianId: draft.accompanyingTechnicianId || null,
+            },
+            {
+              workers: draft.workers,
+              items: parsedItems,
+              checkedIds: draft.checkedIds,
+              notes: draft.notes,
+              siteManagerName: draft.siteManagerName,
+              siteManagerSignatureDataUrl: draft.siteManagerSignatureDataUrl,
+            }
+          ),
+        {
+          loading: he.feedback.saving,
+          success: he.manager.panel.saved,
+          error: false,
+        }
+      )
+      setError(!result.ok)
+      if (result.ok) {
+        setEditing(false)
+        setDraft(null)
+      } else {
+        toast.error(he.manager.invalid)
       }
-    )
-    setError(!result.ok)
-    if (result.ok) {
-      notice.show(he.manager.panel.saved)
-      setEditing(false)
-      setDraft(null)
+    } finally {
+      setSaveBusy(false)
     }
   }
 
@@ -428,12 +459,12 @@ function DiaryBody({
             onClick: () =>
               runAction(() => {
                 void (async () => {
-                  const result = await duplicateManagerDiary(diary.id)
-                  if (!result.ok) {
-                    toast.error(he.manager.panel.duplicateFailed)
-                    return
-                  }
-                  toast.success(he.manager.created)
+                  const result = await withSavingToast(() => duplicateManagerDiary(diary.id), {
+                    loading: he.feedback.duplicating,
+                    success: he.manager.created,
+                    error: he.manager.panel.duplicateFailed,
+                  })
+                  if (!result.ok) return
                   onClose()
                   router.push("/manager")
                 })()
@@ -614,7 +645,13 @@ function DiaryBody({
               >
                 {he.manager.panel.cancelEdit}
               </Button>
-              <Button type="button" size="default" className="h-10 flex-1 px-2" onClick={save}>
+              <Button
+                type="button"
+                size="default"
+                className="h-10 flex-1 px-2"
+                disabled={saveBusy}
+                onClick={save}
+              >
                 {he.manager.panel.saveEdit}
               </Button>
             </div>
@@ -677,16 +714,29 @@ function DiaryBody({
                 size="default"
                 variant="outline"
                 className="h-10 w-[30%] px-2"
+                disabled={confirmBusy}
                 onClick={() => setConfirm(null)}
               >
                 {he.manager.panel.abortAction}
               </Button>
-              <Button type="button" size="default" className="h-10 w-[70%] px-2" onClick={runConfirm}>
-                {confirm === "delete"
-                  ? he.manager.panel.deleteAction
-                  : confirm === "submit"
-                    ? he.manager.panel.submitAction
-                    : he.manager.panel.cancelAction}
+              <Button
+                type="button"
+                size="default"
+                className="h-10 w-[70%] px-2"
+                disabled={confirmBusy}
+                onClick={runConfirm}
+              >
+                {confirmBusy
+                  ? confirm === "delete"
+                    ? he.feedback.deleting
+                    : confirm === "submit"
+                      ? he.feedback.submitting
+                      : he.feedback.cancelling
+                  : confirm === "delete"
+                    ? he.manager.panel.deleteAction
+                    : confirm === "submit"
+                      ? he.manager.panel.submitAction
+                      : he.manager.panel.cancelAction}
               </Button>
             </div>
           </div>

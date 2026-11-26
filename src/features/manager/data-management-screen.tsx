@@ -77,6 +77,7 @@ import { DataLoading } from "@/components/shell/data-loading"
 import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
 import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
+import { withSavingToast } from "@/lib/saving-toast"
 import { compareHebrew, sortByHebrewName, sortSelectOptions } from "@/lib/sort"
 import { cn } from "cn"
 
@@ -254,9 +255,14 @@ export function DataManagementScreen() {
   const db = query.status === "ready" ? query.db : EMPTY_MOCK_DB
 
   const saveCreate = async () => {
-    const result = await persistEditor(create)
+    const result = await withSavingToast(() => persistEditor(create), {
+      loading: he.feedback.creating,
+      success: he.feedback.created,
+      error: false,
+    })
     if (!result.ok) {
       setCreateError(true)
+      toast.error(he.manager.invalid)
       return
     }
     setCreateError(false)
@@ -266,9 +272,14 @@ export function DataManagementScreen() {
 
   const saveEdit = async () => {
     if (!editor) return
-    const result = await persistEditor(editor)
+    const result = await withSavingToast(() => persistEditor(editor), {
+      loading: he.feedback.saving,
+      success: he.feedback.saved,
+      error: false,
+    })
     if (!result.ok) {
       setEditError(true)
+      toast.error(he.manager.invalid)
       return
     }
     setEditError(false)
@@ -279,14 +290,24 @@ export function DataManagementScreen() {
   const runDelete = async () => {
     if (!deleteFlow || deleteFlow.step !== "confirm") return
     const pending = deleteFlow
-    const result = await persistDelete(pending.kind, pending.id)
+    const result = await withSavingToast(() => persistDelete(pending.kind, pending.id), {
+      loading: he.feedback.deleting,
+      success: he.manager.organization.delete,
+      error: false,
+    })
     if (!result.ok) {
       const reason = "reason" in result ? result.reason : "not-found"
       setDeleteFlow({ step: "blocked", kind: pending.kind, id: pending.id, reason })
+      toast.error(
+        reason in he.manager.organization.deleteBlocked
+          ? he.manager.organization.deleteBlocked[
+              reason as keyof typeof he.manager.organization.deleteBlocked
+            ]
+          : he.feedback.saveFailed
+      )
       return
     }
     setDeleteFlow(null)
-    toast.info(he.manager.organization.delete)
   }
 
   return (

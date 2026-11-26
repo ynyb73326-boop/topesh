@@ -5,6 +5,18 @@ export const he = {
   loading: {
     data: "טוען נתונים",
   },
+  feedback: {
+    saving: "שומר…",
+    saved: "נשמר בהצלחה.",
+    saveFailed: "השמירה נכשלה. נסו שוב.",
+    submitting: "שולח דיווח…",
+    creating: "יוצר…",
+    created: "נוצר בהצלחה.",
+    deleting: "מוחק…",
+    deleted: "נמחק.",
+    duplicating: "משכפל…",
+    cancelling: "מבטל…",
+  },
   pullToRefresh: {
     refreshing: "מרענן",
   },

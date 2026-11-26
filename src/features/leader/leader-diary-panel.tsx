@@ -40,6 +40,7 @@ import {
 import { useRepositorySnapshot } from "@/data/browser-store"
 import { activeDomainsFrom, findComponent, findDomain } from "@/data/lookups"
 import { saveLeaderDraft, submitLeaderDiary, useLeaderDiary } from "@/data/browser-store"
+import { withSavingToast } from "@/lib/saving-toast"
 import { addQuantities, parseQuantityInput } from "@/data/quantity"
 import type { DiaryDraft, LeaderDiaryDetail } from "@/data/repository"
 import { DataLoading } from "@/components/shell/data-loading"
@@ -162,6 +163,7 @@ function DiaryEditor({
   const [itemSheetOpen, setItemSheetOpen] = useState(false)
   const [signatureSheetOpen, setSignatureSheetOpen] = useState(false)
   const [submitError, setSubmitError] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const draftRef = useRef(draft)
   const dirtyRef = useRef(false)
   const timerRef = useRef<number | null>(null)
@@ -198,15 +200,29 @@ function DiaryEditor({
   }
 
   const confirmSubmit = async () => {
+    if (submitting) return
+    setSubmitting(true)
     dirtyRef.current = false
-    const result = await submitLeaderDiary(teamLeaderId, detail.id, draftRef.current)
-    if (!result.ok) {
-      setSubmitError(true)
-      return
+    try {
+      const result = await withSavingToast(
+        () => submitLeaderDiary(teamLeaderId, detail.id, draftRef.current),
+        {
+          loading: he.feedback.submitting,
+          success: (next) =>
+            "unchanged" in next && next.unchanged ? false : he.leader.review.success,
+          error: false,
+        }
+      )
+      if (!result.ok) {
+        setSubmitError(true)
+        toast.error(he.leader.review.invalid)
+        return
+      }
+      setReviewOpen(false)
+      onSubmitted()
+    } finally {
+      setSubmitting(false)
     }
-    if (!result.unchanged) toast.success(he.leader.review.success)
-    setReviewOpen(false)
-    onSubmitted()
   }
 
   const overlayOpen = workerSheetOpen || itemSheetOpen || signatureSheetOpen || reviewOpen
@@ -371,6 +387,7 @@ function DiaryEditor({
         detail={detail}
         draft={draft}
         submitError={submitError}
+        submitting={submitting}
         onOpenChange={setReviewOpen}
         onConfirm={confirmSubmit}
       />
@@ -1090,6 +1107,7 @@ function ReviewSheet({
   detail,
   draft,
   submitError,
+  submitting = false,
   onOpenChange,
   onConfirm,
 }: {
@@ -1097,6 +1115,7 @@ function ReviewSheet({
   detail: LeaderDiaryDetail
   draft: DiaryDraft
   submitError: boolean
+  submitting?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
 }) {
@@ -1136,14 +1155,21 @@ function ReviewSheet({
           {submitError ? (
             <p className="text-sm leading-6 text-muted-foreground">{he.leader.review.invalid}</p>
           ) : null}
-          <Button type="button" size="touch" className="w-full" onClick={onConfirm}>
-            {he.leader.review.confirm}
+          <Button
+            type="button"
+            size="touch"
+            className="w-full"
+            disabled={submitting}
+            onClick={onConfirm}
+          >
+            {submitting ? he.feedback.submitting : he.leader.review.confirm}
           </Button>
           <Button
             type="button"
             size="touch"
             variant="outline"
             className="w-full"
+            disabled={submitting}
             onClick={() => onOpenChange(false)}
           >
             {he.leader.review.cancel}

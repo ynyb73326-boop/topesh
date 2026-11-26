@@ -16,7 +16,6 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react"
-import { toast } from "sonner"
 import { AnimatedMetricNumber } from "@/components/motion/animated-metric-number"
 import { PageFrame } from "@/components/motion/page-frame"
 import { Button } from "@/components/ui/button"
@@ -56,6 +55,7 @@ import {
   MobileFilterPicker,
 } from "@/features/manager/mobile-filters/picker-overlay"
 import { he } from "@/i18n/he"
+import { withSavingToast } from "@/lib/saving-toast"
 import {
   formatMonthTitle,
   formatWorkDate,
@@ -651,11 +651,11 @@ function FilterSegment({
 }
 
 function duplicateNextDay(diary: ManagerDiarySummary) {
-  void (async () => {
-    const result = await duplicateManagerDiary(diary.id)
-    if (result.ok) toast.success(he.manager.created)
-    else toast.info(he.manager.invalid)
-  })()
+  void withSavingToast(() => duplicateManagerDiary(diary.id), {
+    loading: he.feedback.duplicating,
+    success: he.manager.created,
+    error: he.manager.invalid,
+  })
 }
 
 function isUpcomingWorkDate(workDate: string) {

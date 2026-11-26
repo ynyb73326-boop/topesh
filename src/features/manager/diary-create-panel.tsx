@@ -39,7 +39,9 @@ import { HebrewDatePicker } from "@/components/hebrew-date-picker"
 import { PanelNoticeBanner, PanelNoticeProvider, usePanelNotice } from "@/components/panel-notice"
 import { panelSurfaceClass, panelSurfaceStyle } from "@/components/shell/panel-surface"
 import { MobileFilterPicker } from "@/features/manager/mobile-filters/picker-overlay"
+import { toast } from "sonner"
 import { createManagerDiary } from "@/data/browser-store"
+import { withSavingToast } from "@/lib/saving-toast"
 import type { MockDb } from "@/data/seed"
 import { he } from "@/i18n/he"
 import { jerusalemToday } from "@/lib/format"
@@ -144,6 +146,7 @@ function CreateForm({
   const [projectName, setProjectName] = useState("")
   const [workOrder, setWorkOrder] = useState("")
   const [showMissing, setShowMissing] = useState(false)
+  const [creating, setCreating] = useState(false)
   const lockLeader = Boolean(fixedTeamLeaderId)
 
   const missing = createMissingFields({
@@ -159,6 +162,7 @@ function CreateForm({
   const highlighted = showMissing ? new Set(missing) : new Set<CreateField>()
 
   const save = async () => {
+    if (creating) return
     const currentMissing = createMissingFields({
       leaderId,
       workDate,
@@ -174,38 +178,50 @@ function CreateForm({
       notice.error(he.manager.fillRequired)
       return
     }
-    const result = await createManagerDiary({
-      teamLeaderId: leaderId,
-      workDate,
-      companyId,
-      customerId,
-      siteId,
-      subSiteName,
-      projectName,
-      workOrderNumber: workOrder,
-      accompanyingTechnicianId: technicianId || null,
-    })
-    if (!result.ok || !("id" in result) || !result.id) {
-      setShowMissing(true)
-      notice.error(he.manager.invalid)
-      return
+    setCreating(true)
+    try {
+      const result = await withSavingToast(
+        () =>
+          createManagerDiary({
+            teamLeaderId: leaderId,
+            workDate,
+            companyId,
+            customerId,
+            siteId,
+            subSiteName,
+            projectName,
+            workOrderNumber: workOrder,
+            accompanyingTechnicianId: technicianId || null,
+          }),
+        {
+          loading: he.feedback.creating,
+          success: he.manager.created,
+          error: false,
+        }
+      )
+      if (!result.ok || !("id" in result) || !result.id) {
+        setShowMissing(true)
+        toast.error(he.manager.invalid)
+        return
+      }
+      setShowMissing(false)
+      if (!lockLeader) setLeaderId("")
+      setTechnicianId("")
+      setCompanyId("")
+      setCustomerId("")
+      setSiteId("")
+      setWorkOrder("")
+      setSubSiteName("")
+      setProjectName("")
+      setWorkDate(jerusalemToday())
+      if (onCreated) {
+        onCreated()
+        return
+      }
+      orderRef.current?.focus()
+    } finally {
+      setCreating(false)
     }
-    setShowMissing(false)
-    if (!lockLeader) setLeaderId("")
-    setTechnicianId("")
-    setCompanyId("")
-    setCustomerId("")
-    setSiteId("")
-    setWorkOrder("")
-    setSubSiteName("")
-    setProjectName("")
-    setWorkDate(jerusalemToday())
-    notice.success(he.manager.created)
-    if (onCreated) {
-      onCreated()
-      return
-    }
-    orderRef.current?.focus()
   }
 
   return (
@@ -309,8 +325,14 @@ function CreateForm({
 
       <PanelNoticeBanner />
       <div className="shrink-0 border-t border-border/70 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <Button type="button" size="default" className="h-[calc(2.25rem*1.1*1.1)] w-full" onClick={save}>
-          {he.manager.save}
+        <Button
+          type="button"
+          size="default"
+          className="h-[calc(2.25rem*1.1*1.1)] w-full"
+          disabled={creating}
+          onClick={save}
+        >
+          {creating ? he.feedback.creating : he.manager.save}
         </Button>
       </div>
     </>

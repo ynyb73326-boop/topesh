@@ -58,6 +58,7 @@ import { DataLoading } from "@/components/shell/data-loading"
 import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
 import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
+import { withSavingToast } from "@/lib/saving-toast"
 import { cn } from "cn"
 
 type TabId = "domains" | "components"
@@ -140,9 +141,14 @@ export function CatalogScreen() {
   }
 
   const saveCreate = async () => {
-    const result = await persistEditor(createForm)
+    const result = await withSavingToast(() => persistEditor(createForm), {
+      loading: he.feedback.creating,
+      success: he.feedback.created,
+      error: false,
+    })
     if (!result.ok) {
       setCreateError(true)
+      toast.error(he.manager.invalid)
       return
     }
     setCreateError(false)
@@ -152,9 +158,14 @@ export function CatalogScreen() {
 
   const saveEdit = async () => {
     if (!editor) return
-    const result = await persistEditor(editor)
+    const result = await withSavingToast(() => persistEditor(editor), {
+      loading: he.feedback.saving,
+      success: he.feedback.saved,
+      error: false,
+    })
     if (!result.ok) {
       setEditError(true)
+      toast.error(he.manager.invalid)
       return
     }
     setEditError(false)
@@ -164,19 +175,26 @@ export function CatalogScreen() {
 
   const runDelete = async () => {
     if (!deleteId) return
-    const result =
-      deleteId.kind === "domains"
-        ? await deleteManagerDomain(deleteId.id)
-        : await deleteManagerComponent(deleteId.id)
+    const pending = deleteId
+    const result = await withSavingToast(
+      () =>
+        pending.kind === "domains"
+          ? deleteManagerDomain(pending.id)
+          : deleteManagerComponent(pending.id),
+      {
+        loading: he.feedback.deleting,
+        success: he.manager.catalog.delete,
+        error: false,
+      }
+    )
     setDeleteId(null)
     if (!result.ok) {
       const reason = "reason" in result ? result.reason : "not-found"
       setBlockReason(reason)
-      toast.info(he.manager.catalog.deleteBlocked[reason])
+      toast.error(he.manager.catalog.deleteBlocked[reason])
       return
     }
     setBlockReason(null)
-    toast.info(he.manager.catalog.delete)
   }
 
   return (
