@@ -1,18 +1,35 @@
 "use client"
 
-import { Bell, BellOff } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { usePushSubscription } from "@/features/push/use-push-subscription"
 import { he } from "@/i18n/he"
 import { toast } from "sonner"
 
 export function PushSettingsSection() {
   const push = usePushSubscription()
-  if (!push.ready) return null
   if (!push.configured) return null
 
-  const onToggle = () => {
+  const locked =
+    !push.ready ||
+    push.busy ||
+    !push.supported ||
+    push.localOnly ||
+    push.permission === "denied"
+
+  const hint = !push.supported
+    ? he.push.unsupported
+    : push.localOnly
+      ? he.push.localOnly
+      : push.permission === "denied"
+        ? he.push.denied
+        : push.subscribed
+          ? he.push.enabledHint
+          : he.push.enableHint
+
+  const onCheckedChange = (checked: boolean) => {
+    if (locked) return
     void (async () => {
-      if (push.subscribed) {
+      if (!checked) {
         const result = await push.disable()
         if (result.ok) toast.success(he.push.disabled)
         else toast.error(he.push.error)
@@ -24,6 +41,7 @@ export function PushSettingsSection() {
         return
       }
       if (result.reason === "denied") toast.error(he.push.denied)
+      else if (result.reason === "local-only") toast.error(he.push.localOnly)
       else if (result.reason === "no-sw") toast.error(he.push.needInstall)
       else if (result.reason === "save") toast.error(he.push.saveFailed)
       else toast.error(he.push.error)
@@ -32,32 +50,18 @@ export function PushSettingsSection() {
 
   return (
     <section className="border-t border-border py-4">
-      <button
-        type="button"
-        className="pressable flex w-full items-center gap-3 rounded-xl text-start hover:bg-muted/40"
-        disabled={push.busy || !push.supported || push.permission === "denied"}
-        onClick={onToggle}
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold tracking-tight">{he.push.title}</span>
-          <span className="mt-1 block text-sm text-muted-foreground">
-            {!push.supported
-              ? he.push.unsupported
-              : push.permission === "denied"
-                ? he.push.denied
-                : push.subscribed
-                  ? he.push.enabledHint
-                  : he.push.enableHint}
-          </span>
-        </span>
-        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-          {push.subscribed ? (
-            <Bell className="size-4" aria-hidden />
-          ) : (
-            <BellOff className="size-4" aria-hidden />
-          )}
-        </span>
-      </button>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold tracking-tight">{he.push.title}</p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">{hint}</p>
+        </div>
+        <Switch
+          checked={push.subscribed}
+          disabled={locked}
+          onCheckedChange={onCheckedChange}
+          aria-label={he.push.title}
+        />
+      </div>
     </section>
   )
 }

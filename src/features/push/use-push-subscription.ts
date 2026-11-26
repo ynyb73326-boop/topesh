@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  getPushPublicKeyAction,
   getPushSubscriptionStatusAction,
   subscribePushAction,
   unsubscribePushAction,
@@ -31,6 +30,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
       }
     )
   })
+}
+
+function getClientVapidPublicKey() {
+  return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim() || null
+}
+
+/** Push SW is not registered under `next dev` (Serwist + DevServiceWorkerCleanup). */
+export function isLocalPushHost() {
+  if (typeof window === "undefined") return false
+  const host = window.location.hostname
+  return (
+    process.env.NODE_ENV !== "production" ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".local")
+  )
 }
 
 async function ensureServiceWorkerRegistration() {
@@ -62,45 +77,53 @@ export type PushEnableResult =
   | { ok: true }
   | {
       ok: false
-      reason: "not-configured" | "denied" | "no-sw" | "invalid" | "save" | "error"
+      reason: "not-configured" | "denied" | "no-sw" | "local-only" | "invalid" | "save" | "error"
     }
 
 export function usePushSubscription() {
   const [supported, setSupported] = useState(false)
-  const [configured, setConfigured] = useState(false)
+  const [configured, setConfigured] = useState(() => Boolean(getClientVapidPublicKey()))
   const [permission, setPermission] = useState<PushPermissionState>("default")
   const [subscribed, setSubscribed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ready, setReady] = useState(false)
+  const [localOnly, setLocalOnly] = useState(false)
 
   const refresh = useCallback(async () => {
+    const publicKey = getClientVapidPublicKey()
+    setConfigured(Boolean(publicKey))
+    setLocalOnly(isLocalPushHost())
+
     const hasApi =
       typeof window !== "undefined" &&
       "serviceWorker" in navigator &&
       "PushManager" in window &&
       "Notification" in window
     setSupported(hasApi)
+
     if (!hasApi) {
       setPermission("unsupported")
-      setConfigured(false)
       setSubscribed(false)
       setReady(true)
       return
     }
+
     setPermission(Notification.permission)
+    // Paint the settings row immediately; hydrate subscription state in the background.
+    setReady(true)
 
-    const [keyResult, status] = await Promise.all([
-      getPushPublicKeyAction(),
-      getPushSubscriptionStatusAction(),
-    ])
-    setConfigured(keyResult.ok || status.configured)
-
-    // Server row is required for outbound pushes. If the browser already has a
-    // local subscription but the DB does not, re-upsert it now.
     try {
+      const status = await getPushSubscriptionStatusAction()
+      if (!publicKey && !status.configured) {
+        setConfigured(false)
+        setSubscribed(false)
+        return
+      }
+      setConfigured(Boolean(publicKey) || status.configured)
+
       const registration = await navigator.serviceWorker.getRegistration()
       const local = registration ? await registration.pushManager.getSubscription() : null
-      if (local && !status.subscribed && keyResult.ok) {
+      if (local && !status.subscribed && publicKey) {
         const json = local.toJSON()
         if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
           const saved = await subscribePushAction({
@@ -111,16 +134,14 @@ export function usePushSubscription() {
           })
           if (saved.ok) {
             setSubscribed(true)
-            setReady(true)
             return
           }
         }
       }
+      setSubscribed(status.subscribed)
     } catch (error) {
-      console.error("[push] resync:", error)
+      console.error("[push] refresh:", error)
     }
-    setSubscribed(status.subscribed)
-    setReady(true)
   }, [])
 
   useEffect(() => {
@@ -130,8 +151,10 @@ export function usePushSubscription() {
   const enable = useCallback(async (): Promise<PushEnableResult> => {
     setBusy(true)
     try {
-      const keyResult = await getPushPublicKeyAction()
-      if (!keyResult.ok) return { ok: false, reason: "not-configured" }
+      if (isLocalPushHost()) return { ok: false, reason: "local-only" }
+
+      const publicKey = getClientVapidPublicKey()
+      if (!publicKey) return { ok: false, reason: "not-configured" }
 
       const permissionResult = await Notification.requestPermission()
       setPermission(permissionResult)
@@ -144,7 +167,6 @@ export function usePushSubscription() {
 
       let subscription = await registration.pushManager.getSubscription()
       if (subscription) {
-        // Re-subscribe if keys are missing from a stale subscription.
         const existing = subscription.toJSON()
         if (!existing.keys?.p256dh || !existing.keys?.auth) {
           await subscription.unsubscribe()
@@ -154,7 +176,7 @@ export function usePushSubscription() {
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyResult.publicKey),
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
         })
       }
 
@@ -211,6 +233,7 @@ export function usePushSubscription() {
     permission,
     subscribed,
     busy,
+    localOnly,
     enable,
     disable,
     refresh,

@@ -106,8 +106,9 @@ The UI remains on the mock repository until Phase 5C/5D.
 2. Auth cookies use a long `maxAge` (~400 days). Session survives minimize/close/PWA relaunch; only the in-app **התנתק** button signs out.
 3. In Supabase Auth settings, keep refresh tokens enabled (default). Optionally raise JWT expiry; refresh cookies keep the user signed in either way.
 4. Paste [`supabase/migrations/20261124093000_auth_profile_select.sql`](../supabase/migrations/20261124093000_auth_profile_select.sql) (optional; app uses service role for profile reads).
-5. `.env.local`: URL, publishable/anon key, service/secret key, `NEXT_PUBLIC_DEV_ROLE_SWITCHER=false`, plus `GMAIL_*` for manager OTP mail.
-6. `npm run dev` → login screen.
+5. Paste [`supabase/migrations/20261126150000_app_data_signals.sql`](../supabase/migrations/20261126150000_app_data_signals.sql) so open sessions refresh live via Realtime (UI also soft-polls while visible as a fallback).
+6. `.env.local`: URL, publishable/anon key, service/secret key, `NEXT_PUBLIC_DEV_ROLE_SWITCHER=false`, plus `GMAIL_*` for manager OTP mail.
+7. `npm run dev` → login screen.
 
 Team leaders authenticate by identity number (server creates a session; no email needed).
 Managers receive a 6-digit email OTP via Gmail SMTP from the Next.js server.

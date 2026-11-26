@@ -288,6 +288,24 @@ export type Database = {
           },
         ]
       }
+      app_data_signals: {
+        Row: {
+          id: number
+          revision: number
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          revision?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          revision?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       work_diaries: {
         Row: {
           id: string
@@ -535,6 +553,10 @@ export type Database = {
       reopen_work_diary_for_signature: {
         Args: { p_diary_id: string }
         Returns: Database["public"]["Tables"]["work_diaries"]["Row"]
+      }
+      bump_app_data_signal: {
+        Args: Record<string, never>
+        Returns: undefined
       }
       app_current_profile_ids: {
         Args: Record<string, never>

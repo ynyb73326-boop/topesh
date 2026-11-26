@@ -24,7 +24,10 @@ export function PushPromptBanner() {
       setOpen(false)
       return
     }
-    if (!push.ready || !push.configured || !push.supported) return
+    if (!push.ready || !push.configured || !push.supported || push.localOnly) {
+      setOpen(false)
+      return
+    }
     if (push.subscribed || push.permission === "denied") {
       setOpen(false)
       return
@@ -45,6 +48,7 @@ export function PushPromptBanner() {
     push.ready,
     push.configured,
     push.supported,
+    push.localOnly,
     push.subscribed,
     push.permission,
   ])
@@ -69,6 +73,7 @@ export function PushPromptBanner() {
         return
       }
       if (result.reason === "denied") toast.error(he.push.denied)
+      else if (result.reason === "local-only") toast.error(he.push.localOnly)
       else if (result.reason === "no-sw") toast.error(he.push.needInstall)
       else if (result.reason === "save") toast.error(he.push.saveFailed)
       else toast.error(he.push.error)

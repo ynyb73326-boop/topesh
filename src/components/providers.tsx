@@ -9,6 +9,7 @@ import { DevServiceWorkerCleanup } from "@/components/pwa/dev-sw-cleanup"
 import { RegisterServiceWorker } from "@/components/pwa/register-service-worker"
 import { PwaInstallListener } from "@/components/pwa/use-pwa-install"
 import { DevSessionProvider } from "@/features/dev-role/dev-session"
+import { LiveDataSync } from "@/features/live/live-data-sync"
 import { PushPromptBanner } from "@/features/push/push-prompt-banner"
 import { ThemeProvider } from "@/features/theme/theme-provider"
 
@@ -20,6 +21,7 @@ export function Providers({ children }: { children: ReactNode }) {
           <DevSessionProvider>
             <DevServiceWorkerCleanup />
             <RegisterServiceWorker />
+            <LiveDataSync />
             <NavigationDirection />
             {children}
             <PushPromptBanner />

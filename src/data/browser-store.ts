@@ -38,6 +38,7 @@ import {
   submitLeaderDiaryAction,
   updateDiaryAssignmentAction,
 } from "@/data/supabase/data-actions"
+import { bumpAppDataSignalAction } from "@/data/supabase/signal-data-change"
 import {
   detailForLeader,
   listForLeader,
@@ -139,7 +140,13 @@ export function resetLeaderStore() {
 }
 
 async function afterMutate<T extends { ok: boolean }>(result: T): Promise<T> {
-  if (result.ok) await loadSnapshot(true)
+  if (result.ok) {
+    await loadSnapshot(true)
+    // Notify other open sessions (managers / team leaders) to reload.
+    void bumpAppDataSignalAction().catch((error) => {
+      console.error("[live] bump signal:", error)
+    })
+  }
   return result
 }
 
