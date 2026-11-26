@@ -44,6 +44,24 @@ export type MockDb = {
   checks: DiaryCheckbox[]
 }
 
+/** Placeholder DB while the live Supabase snapshot is still loading. */
+export const EMPTY_MOCK_DB: MockDb = {
+  version: 10,
+  companies: [],
+  customers: [],
+  sites: [],
+  subSites: [],
+  users: [],
+  technicians: [],
+  domains: [],
+  components: [],
+  checkboxDefinitions: [],
+  diaries: [],
+  workers: [],
+  items: [],
+  checks: [],
+}
+
 const subSiteNames = [
   "קומה 1",
   "קומה 2",

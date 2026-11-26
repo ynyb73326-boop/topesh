@@ -21,7 +21,8 @@ import {
   useManagerDb,
 } from "@/data/browser-store"
 import { getManagerDiary } from "@/data/manager"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { Field, fieldClass } from "@/features/manager/fields"
 import { he } from "@/i18n/he"
 import { formatDateTime, formatQuantity, formatWorkDate } from "@/lib/format"
@@ -29,8 +30,25 @@ import { BidiText } from "@/lib/bidi"
 
 export function ManagerDiaryScreen({ diaryId }: { diaryId: string }) {
   const query = useManagerDb()
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
+  if (query.status === "loading") {
+    return (
+      <PageFrame>
+        <div className="flex flex-col gap-3 px-4 py-5">
+          <AppLink
+            href="/manager"
+            direction="back"
+            className="pressable inline-flex min-h-11 items-center self-start text-sm text-muted-foreground"
+          >
+            {he.manager.back}
+          </AppLink>
+          <div className="overflow-hidden rounded-md border border-border bg-card">
+            <DataLoading framed={false} className="min-h-48 py-8" />
+          </div>
+        </div>
+      </PageFrame>
+    )
+  }
   const diary = getManagerDiary(query.db, diaryId)
   if (!diary) {
     return (

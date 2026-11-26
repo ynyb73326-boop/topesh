@@ -54,8 +54,9 @@ import {
   useManagerDb,
 } from "@/data/browser-store"
 import type { DeleteBlockedReason } from "@/data/manager"
-import type { MockDb } from "@/data/seed"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
 import { cn } from "cn"
 
@@ -114,9 +115,9 @@ export function CatalogScreen() {
   const [deleteId, setDeleteId] = useState<{ kind: TabId; id: string } | null>(null)
   const [blockReason, setBlockReason] = useState<DeleteBlockedReason | null>(null)
 
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
-  const db = query.db
+  const loading = query.status === "loading"
+  const db = query.status === "ready" ? query.db : EMPTY_MOCK_DB
 
   const createForm =
     create.kind === "component"
@@ -236,20 +237,26 @@ export function CatalogScreen() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <EntityList
-              db={db}
-              tab={tab}
-              search={search}
-              onEdit={(next) => {
-                setEditError(false)
-                setBlockReason(null)
-                setEditor(next)
-              }}
-              onDelete={(kind, id) => {
-                setBlockReason(null)
-                setDeleteId({ kind, id })
-              }}
-            />
+            {loading ? (
+              <div className="overflow-hidden rounded-md border border-border bg-card">
+                <DataLoading framed={false} className="min-h-40 py-6" />
+              </div>
+            ) : (
+              <EntityList
+                db={db}
+                tab={tab}
+                search={search}
+                onEdit={(next) => {
+                  setEditError(false)
+                  setBlockReason(null)
+                  setEditor(next)
+                }}
+                onDelete={(kind, id) => {
+                  setBlockReason(null)
+                  setDeleteId({ kind, id })
+                }}
+              />
+            )}
           </div>
 
           <CreateCard

@@ -71,8 +71,9 @@ import {
   type ReportFilterLabels,
   type ReportResult,
 } from "@/data/reports"
-import type { MockDb } from "@/data/seed"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { DiaryPanel, diaryStatusLabel } from "@/features/manager/diary-panel"
 import {
   FilterTriggerControl,
@@ -121,12 +122,13 @@ type ExportChannel = "excel" | "pdf" | "whatsapp"
 
 export function ReportsScreen() {
   const query = useManagerDb()
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
-  return <ReportsReady db={query.db} />
+  const loading = query.status === "loading"
+  const db = query.status === "ready" ? query.db : EMPTY_MOCK_DB
+  return <ReportsReady db={db} loading={loading} />
 }
 
-function ReportsReady({ db }: { db: MockDb }) {
+function ReportsReady({ db, loading }: { db: MockDb; loading: boolean }) {
   const desktop = useDesktop()
   const session = useDevSession()
   const [filters, setFilters] = useState<WorkDiarySearchFilters>(() => emptyWorkDiarySearchFilters())
@@ -523,13 +525,18 @@ function ReportsReady({ db }: { db: MockDb }) {
             selectedIds={selectedIds}
             allSelected={allSelected}
             someSelected={someSelected}
+            loading={loading}
             toolbar={toolbar}
             onToggleAll={toggleAll}
             onToggleOne={toggleOne}
             onOpen={setOpenDiaryId}
           />
 
-          {diaries.length === 0 ? (
+          {loading ? (
+            <div className="rounded-md border border-border bg-card lg:hidden">
+              <DataLoading framed={false} className="min-h-40 py-6" />
+            </div>
+          ) : diaries.length === 0 ? (
             <div className="rounded-md border border-dashed border-border px-3 py-8 text-center lg:hidden">
               <p className="text-sm font-medium text-foreground">{he.manager.reports.empty}</p>
               <p className="mt-1 text-sm text-muted-foreground">{he.manager.reports.emptyHint}</p>
@@ -575,7 +582,7 @@ function ReportsReady({ db }: { db: MockDb }) {
             </div>
           )}
 
-          {loadMore}
+          {loading ? null : loadMore}
         </div>
       </div>
 
@@ -1036,6 +1043,7 @@ function DiaryResultsTable({
   selectedIds,
   allSelected,
   someSelected,
+  loading = false,
   toolbar,
   onToggleAll,
   onToggleOne,
@@ -1045,6 +1053,7 @@ function DiaryResultsTable({
   selectedIds: Set<string>
   allSelected: boolean
   someSelected: boolean
+  loading?: boolean
   toolbar: ReactNode
   onToggleAll: (checked: boolean) => void
   onToggleOne: (id: string, checked: boolean) => void
@@ -1107,7 +1116,13 @@ function DiaryResultsTable({
           </tr>
         </thead>
         <tbody>
-          {diaries.length === 0 ? (
+          {loading ? (
+            <tr>
+              <td colSpan={headers.length} className="p-0">
+                <DataLoading framed={false} className="min-h-40 py-6" />
+              </td>
+            </tr>
+          ) : diaries.length === 0 ? (
             <tr>
               <td colSpan={headers.length} className="px-3 py-8 text-center text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">{he.manager.reports.empty}</p>

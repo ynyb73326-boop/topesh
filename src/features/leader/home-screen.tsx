@@ -23,7 +23,8 @@ import type { LeaderDiarySummary } from "@/data/repository"
 import type { DiaryStatus } from "@/domain/types"
 import { DiaryCard } from "@/features/leader/diary-card"
 import { LeaderDiaryPanel } from "@/features/leader/leader-diary-panel"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
 import { formatWorkDate } from "@/lib/format"
 import { cn } from "cn"
@@ -88,8 +89,10 @@ export function LeaderHomeScreen() {
     if (diaryId) setOpenId(diaryId)
   }, [searchParams])
 
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
+
+  const loading = query.status === "loading"
+  const diaries = query.status === "ready" ? query.data : []
 
   const openDiary = (id: string) => {
     setOpenId(id)
@@ -107,27 +110,27 @@ export function LeaderHomeScreen() {
   }
 
   const hasActiveDateFilters = Boolean(dateFilters.from || dateFilters.to)
-  const filtered = filterDiaries(query.data, search, quickFilter, dateFilters)
-  const submittedCount = query.data.filter((diary) => diary.status === "submitted").length
-  const pendingCount = query.data.filter((diary) => diary.status === "pending").length
-  const totalCount = query.data.length
+  const filtered = filterDiaries(diaries, search, quickFilter, dateFilters)
+  const submittedCount = diaries.filter((diary) => diary.status === "submitted").length
+  const pendingCount = diaries.filter((diary) => diary.status === "pending").length
+  const totalCount = diaries.length
   const metricCards = [
     {
       key: "submitted",
       label: he.leader.home.submittedTotal,
-      value: submittedCount,
+      value: loading ? "—" : submittedCount,
       dot: "bg-emerald-500",
     },
     {
       key: "pending",
       label: he.leader.home.pendingTotal,
-      value: pendingCount,
+      value: loading ? "—" : pendingCount,
       dot: "bg-orange-500",
     },
     {
       key: "total",
       label: he.leader.home.diariesTotal,
-      value: totalCount,
+      value: loading ? "—" : totalCount,
       dot: "bg-zinc-500",
     },
   ] as const
@@ -243,7 +246,9 @@ export function LeaderHomeScreen() {
             </div>
           </div>
 
-          {query.data.length === 0 ? (
+          {loading ? (
+            <DataLoading framed={false} className="min-h-40 py-6" />
+          ) : diaries.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
               <p className="font-medium text-foreground">{he.leader.home.emptyTitle}</p>
               <p className="mt-1">{he.leader.home.emptyBody}</p>

@@ -22,7 +22,7 @@ export default function LeaderLayout({
           <PullToRefresh>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pt-[env(safe-area-inset-top)]">
               <LeaderFrame>
-                <Suspense fallback={<DataLoading />}>{children}</Suspense>
+                <Suspense fallback={<DataLoading framed={false} />}>{children}</Suspense>
               </LeaderFrame>
             </div>
           </PullToRefresh>

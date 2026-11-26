@@ -8,7 +8,8 @@ import { useLeaderDiaries } from "@/data/browser-store"
 import type { DiaryStatus } from "@/domain/types"
 import { DiaryCard } from "@/features/leader/diary-card"
 import { LeaderDiaryPanel } from "@/features/leader/leader-diary-panel"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
 import { cn } from "cn"
 
@@ -21,13 +22,14 @@ export function LeaderHistoryScreen() {
   const [to, setTo] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
 
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
 
+  const loading = query.status === "loading"
+  const diaries = query.status === "ready" ? query.data : []
   const rangeInvalid = Boolean(from && to && from > to)
   const filtered = rangeInvalid
     ? []
-    : query.data.filter((diary) => {
+    : diaries.filter((diary) => {
         if (status !== "all" && diary.status !== status) return false
         if (from && diary.workDate < from) return false
         if (to && diary.workDate > to) return false
@@ -106,7 +108,9 @@ export function LeaderHistoryScreen() {
         ) : null}
 
         <div className="overflow-hidden rounded-md border border-border bg-card">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <DataLoading framed={false} className="min-h-40 py-6" />
+          ) : filtered.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
               <p className="font-medium text-foreground">{he.leader.history.emptyTitle}</p>
               <p className="mt-1">{he.leader.history.emptyBody}</p>

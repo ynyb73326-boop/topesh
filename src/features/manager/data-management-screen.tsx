@@ -73,8 +73,9 @@ import {
 import { panelSurfaceClass, panelSurfaceStyle } from "@/components/shell/panel-surface"
 import { findCustomer } from "@/data/lookups"
 import type { DeleteBlockedReason } from "@/data/manager"
-import type { MockDb } from "@/data/seed"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { DataLoading } from "@/components/shell/data-loading"
+import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { he } from "@/i18n/he"
 import { compareHebrew, sortByHebrewName, sortSelectOptions } from "@/lib/sort"
 import { cn } from "cn"
@@ -248,9 +249,9 @@ export function DataManagementScreen() {
     return () => window.cancelAnimationFrame(frame)
   }, [query.status])
 
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
-  const db = query.db
+  const loading = query.status === "loading"
+  const db = query.status === "ready" ? query.db : EMPTY_MOCK_DB
 
   const saveCreate = async () => {
     const result = await persistEditor(create)
@@ -354,19 +355,25 @@ export function DataManagementScreen() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <EntityList
-              db={db}
-              tab={tab}
-              search={search}
-              onEdit={(next) => {
-                setEditError(false)
-                setDeleteFlow(null)
-                setEditor(next)
-              }}
-              onDelete={(kind, id) => {
-                setDeleteFlow({ step: "confirm", kind, id })
-              }}
-            />
+            {loading ? (
+              <div className="overflow-hidden rounded-md border border-border bg-card">
+                <DataLoading framed={false} className="min-h-40 py-6" />
+              </div>
+            ) : (
+              <EntityList
+                db={db}
+                tab={tab}
+                search={search}
+                onEdit={(next) => {
+                  setEditError(false)
+                  setDeleteFlow(null)
+                  setEditor(next)
+                }}
+                onDelete={(kind, id) => {
+                  setDeleteFlow({ step: "confirm", kind, id })
+                }}
+              />
+            )}
           </div>
 
           <CreateCard

@@ -45,8 +45,9 @@ import {
   type ManagerDiarySummary,
   type WorkDiarySearchFilters,
 } from "@/data/manager"
-import type { MockDb } from "@/data/seed"
-import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
+import { EMPTY_MOCK_DB, type MockDb } from "@/data/seed"
+import { DataLoading } from "@/components/shell/data-loading"
+import { LeaderStoreError } from "@/features/leader/leader-states"
 import { useManagerCreate } from "@/features/manager/manager-create-provider"
 import { DiaryPanel, diaryStatusLabel } from "@/features/manager/diary-panel"
 import {
@@ -116,10 +117,10 @@ export function DashboardScreen() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [draftFilters, setDraftFilters] = useState<AdvancedFilters>(emptyAdvanced)
   const [loaded, setLoaded] = useState({ key: "", extra: 0 })
-  if (query.status === "loading") return <LeaderLoading />
   if (query.status === "error") return <LeaderStoreError />
 
-  const db = query.db
+  const loading = query.status === "loading"
+  const db = query.status === "ready" ? query.db : EMPTY_MOCK_DB
   const today = jerusalemToday()
   const all = listManagerDiaries(db)
   const metrics = he.manager.dashboard.metrics
@@ -128,25 +129,25 @@ export function DashboardScreen() {
       key: "createdToday",
       label: metrics.createdToday.label,
       hint: metrics.createdToday.hint,
-      value: all.filter((diary) => jerusalemDay(diary.createdAt) === today).length,
+      value: loading ? "—" : all.filter((diary) => jerusalemDay(diary.createdAt) === today).length,
     },
     {
       key: "pending",
       label: metrics.pending.label,
       hint: metrics.pending.hint,
-      value: all.filter((diary) => diary.status === "pending").length,
+      value: loading ? "—" : all.filter((diary) => diary.status === "pending").length,
     },
     {
       key: "submitted",
       label: metrics.submitted.label,
       hint: metrics.submitted.hint,
-      value: all.filter((diary) => diary.status === "submitted").length,
+      value: loading ? "—" : all.filter((diary) => diary.status === "submitted").length,
     },
     {
       key: "total",
       label: metrics.total.label,
       hint: metrics.total.hint,
-      value: all.length,
+      value: loading ? "—" : all.length,
     },
   ] as const
   const datePreset =
@@ -424,7 +425,8 @@ export function DashboardScreen() {
         </section>
         <DiaryTable
           diaries={visibleDiaries}
-          empty={diaries.length === 0}
+          empty={!loading && diaries.length === 0}
+          loading={loading}
           toolbar={desktopQuickFilters}
           onOpen={(id) => {
             setOpenId(id)
@@ -442,7 +444,9 @@ export function DashboardScreen() {
             </div>
           </div>
           <div className="rounded-md border border-border bg-card">
-            {diaries.length === 0 ? null : (
+            {loading ? (
+              <DataLoading framed={false} className="min-h-40 py-6" />
+            ) : diaries.length === 0 ? null : (
               <ul>
                 {visibleDiaries.map((diary) => (
                   <li key={diary.id} className="border-b border-border last:border-b-0">
@@ -452,7 +456,7 @@ export function DashboardScreen() {
               </ul>
             )}
           </div>
-          {diaries.length === 0 ? (
+          {loading ? null : diaries.length === 0 ? (
             <div className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
               {he.manager.empty}
             </div>
@@ -648,11 +652,13 @@ function isUpcomingWorkDate(workDate: string) {
 function DiaryTable({
   diaries,
   empty,
+  loading = false,
   toolbar,
   onOpen,
 }: {
   diaries: ManagerDiarySummary[]
   empty: boolean
+  loading?: boolean
   toolbar: ReactNode
   onOpen: (id: string) => void
 }) {
@@ -705,7 +711,13 @@ function DiaryTable({
           </tr>
         </thead>
         <tbody>
-          {empty ? (
+          {loading ? (
+            <tr>
+              <td colSpan={headers.length} className="p-0">
+                <DataLoading framed={false} className="min-h-40 py-6" />
+              </td>
+            </tr>
+          ) : empty ? (
             <tr>
               <td colSpan={headers.length} className="px-3 py-6 text-center text-sm text-muted-foreground">
                 {he.manager.dashboard.recentEmpty}

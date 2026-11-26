@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button"
 import { resetLeaderStore } from "@/data/browser-store"
 import { he } from "@/i18n/he"
 
-/** Shared route/table loading state — spinner + "טוען נתונים". Keeps layout chrome visible. */
+/** Inline table/panel loading — spinner + "טוען נתונים". Layout chrome stays visible. */
 export function LeaderLoading() {
-  return <DataLoading />
+  return <DataLoading framed={false} />
 }
 
 export function LeaderStoreError() {

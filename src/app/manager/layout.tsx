@@ -32,7 +32,7 @@ export default function ManagerLayout({
             <ManagerMobileTopBar />
             <PullToRefresh>
               <main className="flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pt-[env(safe-area-inset-top)]">
-                <Suspense fallback={<DataLoading />}>{children}</Suspense>
+                <Suspense fallback={<DataLoading framed={false} />}>{children}</Suspense>
               </main>
             </PullToRefresh>
           </div>
