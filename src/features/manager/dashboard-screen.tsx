@@ -634,9 +634,11 @@ function FilterSegment({
 }
 
 function duplicateNextDay(diary: ManagerDiarySummary) {
-  const result = duplicateManagerDiary(diary.id)
-  if (result.ok) toast.success(he.manager.created)
-  else toast.info(he.manager.invalid)
+  void (async () => {
+    const result = await duplicateManagerDiary(diary.id)
+    if (result.ok) toast.success(he.manager.created)
+    else toast.info(he.manager.invalid)
+  })()
 }
 
 function isUpcomingWorkDate(workDate: string) {
@@ -949,18 +951,7 @@ function RowCheckbox({
 
 function normalizeCascade(db: MockDb, filters: AdvancedFilters): AdvancedFilters {
   let next = { ...filters }
-  if (next.companyIds.length > 0) {
-    next = {
-      ...next,
-      customerIds: next.customerIds.filter((id) => {
-        const customer = db.customers.find((item) => item.id === id)
-        if (customer?.companyId && next.companyIds.includes(customer.companyId)) return true
-        return db.diaries.some(
-          (diary) => diary.customerId === id && next.companyIds.includes(diary.companyId)
-        )
-      }),
-    }
-  }
+  // Companies and customers are independent — company filter does not clear customers.
   if (next.siteIds.length > 0) {
     next = {
       ...next,
@@ -970,15 +961,6 @@ function normalizeCascade(db: MockDb, filters: AdvancedFilters): AdvancedFilters
           if (site?.customerId && next.customerIds.includes(site.customerId)) return true
           return db.diaries.some(
             (diary) => diary.siteId === id && next.customerIds.includes(diary.customerId)
-          )
-        }
-        if (next.companyIds.length > 0) {
-          if (site?.customerId) {
-            const customer = db.customers.find((item) => item.id === site.customerId)
-            if (customer?.companyId && next.companyIds.includes(customer.companyId)) return true
-          }
-          return db.diaries.some(
-            (diary) => diary.siteId === id && next.companyIds.includes(diary.companyId)
           )
         }
         return Boolean(site)

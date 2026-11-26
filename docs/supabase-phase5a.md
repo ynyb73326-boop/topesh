@@ -1,6 +1,6 @@
 # Phase 5A — Supabase database foundation
 
-The Next.js UI still uses the mock `localStorage` repository. This phase only adds PostgreSQL schema, mutation guards, RLS deny-all, and typed server helpers.
+Runtime data now loads from Supabase via server actions + service role (RLS remains deny-all for the anon key). The mock `localStorage` seed is cleared on first client load and is no longer the live source of truth.
 
 ## Environment variables
 
@@ -9,7 +9,7 @@ The Next.js UI still uses the mock `localStorage` repository. This phase only ad
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Anon key — **unsafe for data** until Auth + allow policies (Phase 5E). RLS denies all business rows in 5A. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **no** | Server-only. Never commit. Never `NEXT_PUBLIC_*`. |
-| `DATA_BACKEND` | optional | Keep `mock` until Phase 5C/5D. |
+| `DATA_BACKEND` | optional | Prefer `supabase`. Legacy `mock` is unused by the live UI path. |
 
 Use separate Supabase projects for local / preview / production. Do not apply unreviewed migrations to production.
 
@@ -41,15 +41,9 @@ Schema rules:
 
 Phase 5B import must create two profiles with the same `person_id` for Yaniv. Phase 5E maps both to one `auth.users` id.
 
-## Missing company associations
+## Company ↔ customer
 
-| State | Representation |
-|---|---|
-| Valid link | `company_id` points to an active company |
-| Missing / unresolved | `company_id IS NULL` |
-| Inactive linked record | `company_id` set but `companies.is_active = false` (or customer/site inactive) |
-
-Resolve null associations in a managed admin workflow before production depends on them. Never auto-assign the first company.
+Customers are **independent** of companies. `customers.company_id` remains nullable for legacy rows, but the app always writes `NULL` and does not filter customers by company. Any company may be paired with any customer on a work diary.
 
 ## Signature amendment (preferred)
 

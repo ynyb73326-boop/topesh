@@ -7,12 +7,6 @@ import { sumQuantityCents } from "@/data/reports"
 import { getManagerDiary, type ManagerDiarySummary } from "@/data/manager"
 import type { MockDb } from "@/data/seed"
 
-/** Piece-count units (יח׳ / יחידה) are treated as endpoint devices; length units are excluded. */
-export function isEndpointUnit(unit: string) {
-  const normalized = unit.trim().replace(/['׳"״]/g, "")
-  return /^יח/.test(normalized)
-}
-
 export type EndpointReport = {
   diaries: ManagerDiarySummary[]
   matchingDiaryCount: number
@@ -37,7 +31,7 @@ export function buildEndpointReport(
     const detail = getManagerDiary(db, diary.id)
     if (!detail) continue
     for (const item of detail.items) {
-      if (!isEndpointUnit(item.unit)) continue
+      // Include every installed line (יח׳, מ׳, קומפלט, …) — not only piece-count units.
       if (componentIds.length > 0 && !componentIds.includes(item.componentId)) continue
       if (domainIds.length > 0 && !domainIds.includes(item.domainId)) continue
       details.push({

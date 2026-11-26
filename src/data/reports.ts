@@ -125,18 +125,12 @@ export function filterOptions(db: MockDb, filters: ReportFilters) {
     db.companies.map((item) => ({ value: item.id, label: item.name }))
   )
   const customers = sortSelectOptions(
-    db.customers
-      .filter((item) => !filters.companyId || item.companyId === filters.companyId)
-      .map((item) => ({ value: item.id, label: item.name }))
+    db.customers.map((item) => ({ value: item.id, label: item.name }))
   )
   const sites = sortSelectOptions(
     db.sites
       .filter((item) => {
         if (filters.customerId) return item.customerId === filters.customerId
-        if (filters.companyId) {
-          const customer = findCustomer(db, item.customerId)
-          return customer?.companyId === filters.companyId
-        }
         return true
       })
       .map((item) => ({ value: item.id, label: item.name }))

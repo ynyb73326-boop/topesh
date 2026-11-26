@@ -169,7 +169,7 @@ function DiaryEditor({
   useEffect(() => {
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current)
-      if (dirtyRef.current) saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
+      if (dirtyRef.current) void saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
     }
   }, [detail.id, teamLeaderId])
 
@@ -179,27 +179,27 @@ function DiaryEditor({
     setDraft(next)
     if (timerRef.current) window.clearTimeout(timerRef.current)
     if (immediate) {
-      saveLeaderDraft(teamLeaderId, detail.id, next)
+      void saveLeaderDraft(teamLeaderId, detail.id, next)
       dirtyRef.current = false
       return
     }
     timerRef.current = window.setTimeout(() => {
-      saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
+      void saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
       dirtyRef.current = false
     }, 250)
   }
 
   const openReview = () => {
     if (timerRef.current) window.clearTimeout(timerRef.current)
-    saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
+    void saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
     dirtyRef.current = false
     setSubmitError(false)
     setReviewOpen(true)
   }
 
-  const confirmSubmit = () => {
+  const confirmSubmit = async () => {
     dirtyRef.current = false
-    const result = submitLeaderDiary(teamLeaderId, detail.id, draftRef.current)
+    const result = await submitLeaderDiary(teamLeaderId, detail.id, draftRef.current)
     if (!result.ok) {
       setSubmitError(true)
       return

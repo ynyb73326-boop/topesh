@@ -26,15 +26,22 @@ export function RoleGate({
   }, [hydrated, role, router, session.ready, session.role])
 
   if (!authMode && !devRoleSwitcherEnabled) return <HoldingScreen />
-  if (!session.ready) {
-    return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-md items-center justify-center px-4">
-        <p className="text-sm text-muted-foreground">{he.auth.signingIn}</p>
-      </main>
-    )
-  }
-  if (session.role !== role) return null
-  return children
+
+  // Always keep `{children}` mounted so Cache Components can validate instant
+  // navigation (RoleGate is a Client Component — omitting children drops the page segment).
+  const allowed = session.ready && session.role === role
+  return (
+    <>
+      {!allowed ? (
+        <main className="mx-auto flex min-h-dvh w-full max-w-md items-center justify-center px-4">
+          <p className="text-sm text-muted-foreground">{he.auth.signingIn}</p>
+        </main>
+      ) : null}
+      <div hidden={!allowed} className={allowed ? "contents" : undefined}>
+        {children}
+      </div>
+    </>
+  )
 }
 
 export function HoldingScreen() {

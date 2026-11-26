@@ -158,7 +158,7 @@ function CreateForm({
   })
   const highlighted = showMissing ? new Set(missing) : new Set<CreateField>()
 
-  const save = () => {
+  const save = async () => {
     const currentMissing = createMissingFields({
       leaderId,
       workDate,
@@ -174,7 +174,7 @@ function CreateForm({
       notice.error(he.manager.fillRequired)
       return
     }
-    const result = createManagerDiary({
+    const result = await createManagerDiary({
       teamLeaderId: leaderId,
       workDate,
       companyId,

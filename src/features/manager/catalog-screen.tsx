@@ -138,8 +138,8 @@ export function CatalogScreen() {
     router.replace(`/manager/catalog?tab=${next}`, { scroll: false })
   }
 
-  const saveCreate = () => {
-    const result = persistEditor(createForm)
+  const saveCreate = async () => {
+    const result = await persistEditor(createForm)
     if (!result.ok) {
       setCreateError(true)
       return
@@ -149,9 +149,9 @@ export function CatalogScreen() {
     setCreate(createBlank(tab, db))
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editor) return
-    const result = persistEditor(editor)
+    const result = await persistEditor(editor)
     if (!result.ok) {
       setEditError(true)
       return
@@ -161,12 +161,12 @@ export function CatalogScreen() {
     setEditor(null)
   }
 
-  const runDelete = () => {
+  const runDelete = async () => {
     if (!deleteId) return
     const result =
       deleteId.kind === "domains"
-        ? deleteManagerDomain(deleteId.id)
-        : deleteManagerComponent(deleteId.id)
+        ? await deleteManagerDomain(deleteId.id)
+        : await deleteManagerComponent(deleteId.id)
     setDeleteId(null)
     if (!result.ok) {
       const reason = "reason" in result ? result.reason : "not-found"

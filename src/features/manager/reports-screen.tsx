@@ -1704,12 +1704,7 @@ function isFilterActive(filters: WorkDiarySearchFilters) {
 
 function normalizeCascade(db: MockDb, filters: WorkDiarySearchFilters): WorkDiarySearchFilters {
   let next = { ...filters }
-  if (next.companyIds.length > 0) {
-    next = {
-      ...next,
-      customerIds: next.customerIds.filter((id) => customerMatchesCompanies(db, id, next.companyIds)),
-    }
-  }
+  // Companies and customers are independent — company filter does not clear customers.
   if (next.siteIds.length > 0) {
     next = {
       ...next,
@@ -1728,30 +1723,12 @@ function normalizeCascade(db: MockDb, filters: WorkDiarySearchFilters): WorkDiar
   return next
 }
 
-function customerMatchesCompanies(db: MockDb, customerId: string, companyIds: string[]) {
-  if (companyIds.length === 0) return true
-  const customer = db.customers.find((item) => item.id === customerId)
-  if (customer?.companyId && companyIds.includes(customer.companyId)) return true
-  return db.diaries.some(
-    (diary) => diary.customerId === customerId && companyIds.includes(diary.companyId)
-  )
-}
-
 function siteMatchesFilters(db: MockDb, siteId: string, filters: WorkDiarySearchFilters) {
   const site = db.sites.find((item) => item.id === siteId)
   if (filters.customerIds.length > 0) {
     if (site?.customerId && filters.customerIds.includes(site.customerId)) return true
     return db.diaries.some(
       (diary) => diary.siteId === siteId && filters.customerIds.includes(diary.customerId)
-    )
-  }
-  if (filters.companyIds.length > 0) {
-    if (site?.customerId) {
-      const customer = db.customers.find((item) => item.id === site.customerId)
-      if (customer?.companyId && filters.companyIds.includes(customer.companyId)) return true
-    }
-    return db.diaries.some(
-      (diary) => diary.siteId === siteId && filters.companyIds.includes(diary.companyId)
     )
   }
   return Boolean(site)

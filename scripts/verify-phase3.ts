@@ -122,12 +122,12 @@ assert.ok(company)
 db = company
 const companyId = db.companies.at(-1)?.id
 assert.ok(companyId)
-const customer = saveCustomer(db, null, { name: "לקוח חדש", companyId })
+const customer = saveCustomer(db, null, { name: "לקוח חדש" })
 assert.ok(customer)
 db = customer
 const customerId = db.customers.at(-1)?.id
 assert.ok(customerId)
-assert.equal(db.customers.at(-1)?.companyId, companyId)
+assert.equal(db.customers.at(-1)?.companyId, "")
 const site = saveSite(db, null, { name: "אתר חדש", customerId })
 assert.ok(site)
 db = site

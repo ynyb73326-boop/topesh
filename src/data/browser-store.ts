@@ -1,48 +1,47 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { useDevSession, useHasHydrated } from "@/features/dev-role/dev-session"
-import {
-  assignDiary,
-  cancelDiary,
-  deleteCompany,
-  deleteCustomer,
-  deleteDiary,
-  deleteSite,
-  deleteUser,
-  duplicateDiary,
-  editDiary,
-  markDiaryCancelled,
-  markDiarySubmitted,
-  reopenDiaryForSignatureCapture,
-  saveCompany,
-  deleteComponent,
-  deleteDomain,
-  deleteTechnician,
-  saveComponent,
-  saveCustomer,
-  saveDomain,
-  saveManagerUser,
-  saveSite,
-  saveTeamLeader,
-  saveTechnician,
-  setCompanyActive,
-  setCustomerActive,
-  setSiteActive,
-  setTechnicianActive,
-  setUserActive,
-  updateAssignment,
-  type CustomerInput,
-  type DiaryAssignmentInput,
-  type ManagerUserInput,
-  type SiteInput,
-  type TeamLeaderInput,
-  type TechnicianInput,
+import type {
+  CustomerInput,
+  DiaryAssignmentInput,
+  ManagerUserInput,
+  SiteInput,
+  TeamLeaderInput,
+  TechnicianInput,
 } from "@/data/manager"
 import {
-  createTeamLeaderRepository,
+  cancelDiaryAction,
+  createDiaryAction,
+  deleteCompanyAction,
+  deleteComponentAction,
+  deleteCustomerAction,
+  deleteDiaryAction,
+  deleteDomainAction,
+  deleteSiteAction,
+  deleteTechnicianAction,
+  deleteUserAction,
+  duplicateDiaryAction,
+  editDiaryAction,
+  fetchAppSnapshotAction,
+  reopenDiaryForSignatureAction,
+  saveCompanyAction,
+  saveComponentAction,
+  saveCustomerAction,
+  saveDomainAction,
+  saveLeaderDraftAction,
+  saveManagerAccountAction,
+  saveSiteAction,
+  saveTeamLeaderAction,
+  saveTechnicianAction,
+  submitDiaryAction,
+  submitLeaderDiaryAction,
+  updateDiaryAssignmentAction,
+} from "@/data/supabase/data-actions"
+import {
   detailForLeader,
   listForLeader,
+  MOCK_DB_KEY,
   type DiaryDraft,
   type LeaderDiaryDetail,
   type LeaderDiarySummary,
@@ -52,75 +51,124 @@ import type { MockDb } from "@/data/seed"
 
 const EVENT = "work-diary-db"
 const SERVER_SNAPSHOT: RepositorySnapshot = { status: "error" }
+const ERROR_SNAPSHOT: RepositorySnapshot = { status: "error" }
 const LOADING = { status: "loading" } as const
 
-let repository: ReturnType<typeof createTeamLeaderRepository> | null = null
-let cached: RepositorySnapshot | null = null
+type CacheState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; db: MockDb }
+  | { status: "error" }
+
+let cache: CacheState = { status: "idle" }
+/** Stable identity for useSyncExternalStore — never allocate in getSnapshot. */
+let clientSnapshot: RepositorySnapshot = SERVER_SNAPSHOT
+let inflight: Promise<void> | null = null
+let mockCleared = false
 
 function subscribe(onStoreChange: () => void) {
-  const onStorage = (event: StorageEvent) => {
-    if (event.key !== null && event.key !== "work-diary:mock-db:v1") return
-    repository?.reload()
-    cached = repository?.getSnapshot() ?? null
-    onStoreChange()
-  }
   window.addEventListener(EVENT, onStoreChange)
-  window.addEventListener("storage", onStorage)
-  return () => {
-    window.removeEventListener(EVENT, onStoreChange)
-    window.removeEventListener("storage", onStorage)
-  }
+  return () => window.removeEventListener(EVENT, onStoreChange)
 }
 
-function ensureRepository() {
-  if (repository) return repository
-  repository = createTeamLeaderRepository(window.localStorage, () => {
-    cached = repository?.getSnapshot() ?? null
-    window.dispatchEvent(new Event(EVENT))
-  })
-  cached = repository.getSnapshot()
-  return repository
+function notify() {
+  window.dispatchEvent(new Event(EVENT))
+}
+
+function clearLegacyMock() {
+  if (mockCleared || typeof window === "undefined") return
+  try {
+    window.localStorage.removeItem(MOCK_DB_KEY)
+  } catch {
+    /* ignore */
+  }
+  mockCleared = true
+}
+
+async function loadSnapshot(force = false) {
+  clearLegacyMock()
+  if (!force && cache.status === "ready") return
+  if (inflight) {
+    await inflight
+    return
+  }
+  const keepReadyUi = cache.status === "ready"
+  if (!keepReadyUi) {
+    cache = { status: "loading" }
+    clientSnapshot = SERVER_SNAPSHOT
+    notify()
+  }
+  inflight = (async () => {
+    const result = await fetchAppSnapshotAction()
+    if (result.ok) {
+      cache = { status: "ready", db: result.db }
+      clientSnapshot = { status: "ready", db: result.db }
+    } else {
+      cache = { status: "error" }
+      clientSnapshot = ERROR_SNAPSHOT
+    }
+    inflight = null
+    notify()
+  })()
+  await inflight
 }
 
 function getClientSnapshot(): RepositorySnapshot {
-  ensureRepository()
-  return cached ?? { status: "error" }
+  return clientSnapshot
 }
 
 export function useRepositorySnapshot() {
+  const hydrated = useHasHydrated()
+  const session = useDevSession()
+
+  useEffect(() => {
+    if (!hydrated || !session.ready || !session.user) return
+    void loadSnapshot(cache.status !== "ready")
+  }, [hydrated, session.ready, session.user?.id])
+
   return useSyncExternalStore(subscribe, getClientSnapshot, () => SERVER_SNAPSHOT)
 }
 
-/** Re-read the local mock DB and notify subscribers (used by pull-to-refresh). */
+/** Re-fetch live Supabase snapshot (pull-to-refresh). */
 export function reloadBrowserStore() {
-  const repo = ensureRepository()
-  repo.reload()
-  cached = repo.getSnapshot()
+  void loadSnapshot(true)
 }
 
 export function resetLeaderStore() {
-  ensureRepository().reset()
+  void loadSnapshot(true)
 }
 
-export function saveLeaderDraft(
-  teamLeaderId: string,
+async function afterMutate<T extends { ok: boolean }>(result: T): Promise<T> {
+  if (result.ok) await loadSnapshot(true)
+  return result
+}
+
+export async function saveLeaderDraft(
+  _teamLeaderId: string,
   diaryId: string,
   draft: DiaryDraft
 ) {
-  return ensureRepository().saveDraft(teamLeaderId, diaryId, draft)
+  const result = await saveLeaderDraftAction(diaryId, draft)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: "invalid" as const }
+  const db = cache.status === "ready" ? cache.db : null
+  const detail = db ? detailForLeader(db, _teamLeaderId, diaryId) : null
+  if (!detail) return { ok: false as const, reason: "not-found" as const }
+  return { ok: true as const, unchanged: false, data: detail }
 }
 
-export function submitLeaderDiary(
-  teamLeaderId: string,
+export async function submitLeaderDiary(
+  _teamLeaderId: string,
   diaryId: string,
   draft: DiaryDraft
 ) {
-  return ensureRepository().submit(
-    teamLeaderId,
-    diaryId,
-    draft,
-    new Date().toISOString()
-  )
+  const result = await submitLeaderDiaryAction(diaryId, draft)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: "invalid" as const }
+  const db = cache.status === "ready" ? cache.db : null
+  const detail = db ? detailForLeader(db, _teamLeaderId, diaryId) : null
+  if (!detail) return { ok: false as const, reason: "not-found" as const }
+  return { ok: true as const, unchanged: false, data: detail }
 }
 
 type LeaderQuery<T> =
@@ -143,7 +191,9 @@ function settle<T>(
   if (
     !context.hydrated ||
     !context.teamLeaderId ||
-    context.snapshot === SERVER_SNAPSHOT
+    context.snapshot === SERVER_SNAPSHOT ||
+    cache.status === "loading" ||
+    cache.status === "idle"
   ) {
     return LOADING
   }
@@ -155,212 +205,170 @@ function settle<T>(
   }
 }
 
-function mutate(next: MockDb | null | { db: MockDb; id: string }) {
-  const repo = ensureRepository()
-  if (!next) return { ok: false as const }
-  if ("id" in next) {
-    repo.replace(next.db)
-    return { ok: true as const, id: next.id }
-  }
-  repo.replace(next)
-  return { ok: true as const }
-}
-
 export function useManagerDb():
   | typeof LOADING
   | { status: "error" }
   | { status: "ready"; db: MockDb } {
   const hydrated = useHasHydrated()
   const snapshot = useRepositorySnapshot()
-  if (!hydrated || snapshot === SERVER_SNAPSHOT) return LOADING
+  if (!hydrated || snapshot === SERVER_SNAPSHOT || cache.status === "loading" || cache.status === "idle") {
+    return LOADING
+  }
   if (snapshot.status !== "ready") return { status: "error" }
   return { status: "ready", db: snapshot.db }
 }
 
-export function createManagerDiary(input: DiaryAssignmentInput) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(assignDiary(db, input, new Date().toISOString()))
+export async function createManagerDiary(input: DiaryAssignmentInput) {
+  return afterMutate(await createDiaryAction(input))
 }
 
-export function updateManagerDiary(diaryId: string, input: DiaryAssignmentInput) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(updateAssignment(db, diaryId, input))
+export async function updateManagerDiary(diaryId: string, input: DiaryAssignmentInput) {
+  return afterMutate(await updateDiaryAssignmentAction(diaryId, input))
 }
 
-export function cancelManagerDiary(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(cancelDiary(db, diaryId))
+export async function cancelManagerDiary(diaryId: string) {
+  return afterMutate(await cancelDiaryAction(diaryId))
 }
 
-export function editManagerDiary(
+export async function editManagerDiary(
   diaryId: string,
   input: DiaryAssignmentInput,
   draft: DiaryDraft
 ) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(editDiary(db, diaryId, input, draft))
+  return afterMutate(await editDiaryAction(diaryId, input, draft))
 }
 
-export function deleteManagerDiary(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(deleteDiary(db, diaryId))
+export async function deleteManagerDiary(diaryId: string) {
+  return afterMutate(await deleteDiaryAction(diaryId))
 }
 
-export function markManagerDiaryCancelled(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(markDiaryCancelled(db, diaryId))
+export async function markManagerDiaryCancelled(diaryId: string) {
+  return afterMutate(await cancelDiaryAction(diaryId))
 }
 
-export function markManagerDiarySubmitted(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(markDiarySubmitted(db, diaryId))
+export async function markManagerDiarySubmitted(diaryId: string) {
+  return afterMutate(await submitDiaryAction(diaryId))
 }
 
-export function reopenManagerDiaryForSignature(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(reopenDiaryForSignatureCapture(db, diaryId))
+export async function reopenManagerDiaryForSignature(diaryId: string) {
+  return afterMutate(await reopenDiaryForSignatureAction(diaryId))
 }
 
-export function duplicateManagerDiary(diaryId: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(duplicateDiary(db, diaryId, new Date().toISOString()))
+export async function duplicateManagerDiary(diaryId: string) {
+  return afterMutate(await duplicateDiaryAction(diaryId))
 }
 
-export function saveManagerCompany(id: string | null, name: string) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveCompany(db, id, name)) : { ok: false as const }
+export async function saveManagerCompany(id: string | null, name: string) {
+  return afterMutate(await saveCompanyAction(id, name))
 }
 
-export function saveManagerCustomer(id: string | null, input: CustomerInput) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveCustomer(db, id, input)) : { ok: false as const }
+export async function saveManagerCustomer(id: string | null, input: CustomerInput) {
+  return afterMutate(await saveCustomerAction(id, input))
 }
 
-export function saveManagerSite(id: string | null, input: SiteInput) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveSite(db, id, input)) : { ok: false as const }
+export async function saveManagerSite(id: string | null, input: SiteInput) {
+  return afterMutate(await saveSiteAction(id, input))
 }
 
-export function saveManagerTechnician(id: string | null, input: TechnicianInput) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const }
-  return mutate(saveTechnician(db, id, input))
+export async function saveManagerTechnician(id: string | null, input: TechnicianInput) {
+  return afterMutate(await saveTechnicianAction(id, input))
 }
 
-export function deleteManagerTechnician(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteTechnician(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerTechnician(id: string) {
+  const result = await deleteTechnicianAction(id)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: (result.reason as "has-diaries") || "not-found" }
+  return { ok: true as const }
 }
 
-export function setManagerTechnicianActive(id: string, isActive: boolean) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(setTechnicianActive(db, id, isActive)) : { ok: false as const }
+export async function setManagerTechnicianActive(_id: string, _isActive: boolean) {
+  return { ok: false as const }
 }
 
-export function setManagerCompanyActive(id: string, isActive: boolean) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(setCompanyActive(db, id, isActive)) : { ok: false as const }
+export async function setManagerCompanyActive(_id: string, _isActive: boolean) {
+  return { ok: false as const }
 }
 
-export function setManagerCustomerActive(id: string, isActive: boolean) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(setCustomerActive(db, id, isActive)) : { ok: false as const }
+export async function setManagerCustomerActive(_id: string, _isActive: boolean) {
+  return { ok: false as const }
 }
 
-export function setManagerSiteActive(id: string, isActive: boolean) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(setSiteActive(db, id, isActive)) : { ok: false as const }
+export async function setManagerSiteActive(_id: string, _isActive: boolean) {
+  return { ok: false as const }
 }
 
-export function setManagerUserActive(id: string, isActive: boolean) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = setUserActive(db, id, isActive)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function setManagerUserActive(_id: string, _isActive: boolean) {
+  return { ok: false as const, reason: "not-found" as const }
 }
 
-export function deleteManagerCompany(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteCompany(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerCompany(id: string) {
+  const result = await deleteCompanyAction(id)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: (result.reason as "has-diaries") || "not-found" }
+  return { ok: true as const }
 }
 
-export function deleteManagerCustomer(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteCustomer(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerCustomer(id: string) {
+  const result = await deleteCustomerAction(id)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: (result.reason as "has-diaries") || "not-found" }
+  return { ok: true as const }
 }
 
-export function deleteManagerSite(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteSite(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerSite(id: string) {
+  const result = await deleteSiteAction(id)
+  await afterMutate(result)
+  if (!result.ok) return { ok: false as const, reason: (result.reason as "has-diaries") || "not-found" }
+  return { ok: true as const }
 }
 
-export function deleteManagerUser(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteUser(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerUser(id: string) {
+  const result = await deleteUserAction(id)
+  await afterMutate(result)
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      reason: (result.reason as "has-diaries" | "last-manager" | "not-found") || "not-found",
+    }
+  }
+  return { ok: true as const }
 }
 
-export function saveManagerDomain(id: string | null, name: string) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveDomain(db, id, name)) : { ok: false as const }
+export async function saveManagerDomain(id: string | null, name: string) {
+  return afterMutate(await saveDomainAction(id, name))
 }
 
-export function saveManagerComponent(
+export async function saveManagerComponent(
   id: string | null,
   input: { domainId: string; name: string; unit: string }
 ) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveComponent(db, id, input)) : { ok: false as const }
+  return afterMutate(await saveComponentAction(id, input))
 }
 
-export function deleteManagerDomain(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteDomain(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerDomain(id: string) {
+  const result = await deleteDomainAction(id)
+  await afterMutate(result)
+  if (!result.ok) {
+    return { ok: false as const, reason: (result.reason as "has-components") || "not-found" }
+  }
+  return { ok: true as const }
 }
 
-export function deleteManagerComponent(id: string) {
-  const db = ensureRepository().readDb()
-  if (!db) return { ok: false as const, reason: "not-found" as const }
-  const result = deleteComponent(db, id)
-  if ("reason" in result) return { ok: false as const, reason: result.reason }
-  return mutate(result.db)
+export async function deleteManagerComponent(id: string) {
+  const result = await deleteComponentAction(id)
+  await afterMutate(result)
+  if (!result.ok) {
+    return { ok: false as const, reason: (result.reason as "has-diaries") || "not-found" }
+  }
+  return { ok: true as const }
 }
 
-export function saveManagerTeamLeader(id: string | null, input: TeamLeaderInput) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveTeamLeader(db, id, input)) : { ok: false as const }
+export async function saveManagerTeamLeader(id: string | null, input: TeamLeaderInput) {
+  return afterMutate(await saveTeamLeaderAction(id, input))
 }
 
-export function saveManagerAccount(id: string | null, input: ManagerUserInput) {
-  const db = ensureRepository().readDb()
-  return db ? mutate(saveManagerUser(db, id, input)) : { ok: false as const }
+export async function saveManagerAccount(id: string | null, input: ManagerUserInput) {
+  return afterMutate(await saveManagerAccountAction(id, input))
 }
 
 export function useLeaderDiaries(): LeaderQuery<LeaderDiarySummary[]> {

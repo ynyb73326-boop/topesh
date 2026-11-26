@@ -76,8 +76,8 @@ function DiaryDetail({
   const customers = db.customers
   const sites = db.sites
 
-  const save = () => {
-    const result = updateManagerDiary(diary.id, {
+  const save = async () => {
+    const result = await updateManagerDiary(diary.id, {
       teamLeaderId: leaderId,
       workDate,
       companyId,
@@ -91,8 +91,8 @@ function DiaryDetail({
     setError(!result.ok)
   }
 
-  const duplicate = () => {
-    const result = duplicateManagerDiary(diary.id)
+  const duplicate = async () => {
+    const result = await duplicateManagerDiary(diary.id)
     if (result.ok && "id" in result && result.id) router.push(`/manager/diaries/${result.id}`)
   }
 
@@ -218,8 +218,10 @@ function DiaryDetail({
               type="button"
               size="touch"
               onClick={() => {
-                const result = cancelManagerDiary(diary.id)
-                if (result.ok) router.push("/manager")
+                void (async () => {
+                  const result = await cancelManagerDiary(diary.id)
+                  if (result.ok) router.push("/manager")
+                })()
               }}
             >
               {he.manager.cancelAction}

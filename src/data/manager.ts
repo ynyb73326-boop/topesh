@@ -77,7 +77,6 @@ export type ManagerUserInput = {
 
 export type CustomerInput = {
   name: string
-  companyId: string
 }
 
 export type SiteInput = {
@@ -238,10 +237,8 @@ export function workDiarySearchOptions(db: MockDb, filters: WorkDiarySearchFilte
       value: id,
       label: findCustomer(db, id)?.name ?? id,
     })),
-    // Keep org-linked customers available when companies are chosen, even if no diary match yet.
-    db.customers
-      .filter((item) => filters.companyIds.length === 0 || filters.companyIds.includes(item.companyId))
-      .map((item) => ({ value: item.id, label: item.name }))
+    // Customers are independent of companies — always offer the full catalog.
+    db.customers.map((item) => ({ value: item.id, label: item.name }))
   )
 
   const sites = uniqueOptions(
@@ -256,10 +253,6 @@ export function workDiarySearchOptions(db: MockDb, filters: WorkDiarySearchFilte
     db.sites
       .filter((item) => {
         if (filters.customerIds.length > 0) return filters.customerIds.includes(item.customerId)
-        if (filters.companyIds.length > 0) {
-          const customer = findCustomer(db, item.customerId)
-          return Boolean(customer && filters.companyIds.includes(customer.companyId))
-        }
         return true
       })
       .map((item) => ({ value: item.id, label: item.name }))
@@ -713,7 +706,6 @@ export function saveCompany(db: MockDb, id: string | null, name: string): MockDb
 export function saveCustomer(db: MockDb, id: string | null, input: CustomerInput): MockDb | null {
   const clean = cleanName(input.name)
   if (!clean) return null
-  if (!db.companies.some((item) => item.id === input.companyId)) return null
   if (!id) {
     return {
       ...db,
@@ -721,7 +713,7 @@ export function saveCustomer(db: MockDb, id: string | null, input: CustomerInput
         ...db.customers,
         {
           id: crypto.randomUUID(),
-          companyId: input.companyId,
+          companyId: "",
           name: clean,
           isActive: true,
           createdAt: new Date().toISOString(),
@@ -733,7 +725,7 @@ export function saveCustomer(db: MockDb, id: string | null, input: CustomerInput
   return {
     ...db,
     customers: db.customers.map((item) =>
-      item.id === id ? { ...item, name: clean, companyId: input.companyId } : item
+      item.id === id ? { ...item, name: clean, companyId: "" } : item
     ),
   }
 }

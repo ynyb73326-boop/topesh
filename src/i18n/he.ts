@@ -314,7 +314,7 @@ export const he = {
       exportModeContents: "תוכן היומנים",
       exportModeContentsHint: "קובץ מפורט לכל יומן. כמה יומנים יורדים כ־ZIP.",
       exportModeEndpoints: "רשימת אביזרי קצה",
-      exportModeEndpointsHint: "סיכום ופירוט אביזרי קצה בלבד מתוך היומנים שנבחרו.",
+      exportModeEndpointsHint: "סיכום ופירוט כל הרכיבים מהיומנים שנבחרו (כולל יח׳, מ׳ וקומפלט).",
       exportConfirm: "ייצוא",
       whatsAppConfirm: "שליחה",
       exportCancel: "ביטול",
@@ -452,7 +452,7 @@ export const he = {
       noNotes: "אין הערות",
       noSignature: "לא נוספה חתימה",
       success: "היומן הוגש וננעל.",
-      invalid: "לא ניתן להגיש. בדקו שהכמויות תקינות.",
+      invalid: "לא ניתן להגיש. בדקו את הפרטים ונסו שוב.",
     },
   },
   nav: {

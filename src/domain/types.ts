@@ -17,7 +17,7 @@ export type Company = {
 
 export type Customer = {
   id: string
-  /** Legacy optional link; new customers are name-only. */
+  /** Unused — customers are independent; any company may use any customer. */
   companyId: string
   name: string
   isActive: boolean

@@ -71,7 +71,7 @@ import {
   useManagerDb,
 } from "@/data/browser-store"
 import { panelSurfaceClass, panelSurfaceStyle } from "@/components/shell/panel-surface"
-import { findCompany, findCustomer } from "@/data/lookups"
+import { findCustomer } from "@/data/lookups"
 import type { DeleteBlockedReason } from "@/data/manager"
 import type { MockDb } from "@/data/seed"
 import { LeaderLoading, LeaderStoreError } from "@/features/leader/leader-states"
@@ -83,7 +83,7 @@ type TabId = "companies" | "customers" | "sites" | "technicians" | "teamLeaders"
 
 type Editor =
   | { kind: "company"; id: string | null; name: string }
-  | { kind: "customer"; id: string | null; name: string; companyId: string }
+  | { kind: "customer"; id: string | null; name: string }
   | { kind: "site"; id: string | null; name: string; customerId: string }
   | { kind: "technician"; id: string | null; fullName: string; phone: string }
   | {
@@ -252,8 +252,8 @@ export function DataManagementScreen() {
   if (query.status === "error") return <LeaderStoreError />
   const db = query.db
 
-  const saveCreate = () => {
-    const result = persistEditor(create)
+  const saveCreate = async () => {
+    const result = await persistEditor(create)
     if (!result.ok) {
       setCreateError(true)
       return
@@ -263,9 +263,9 @@ export function DataManagementScreen() {
     setCreate(createBlank(tab, db))
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editor) return
-    const result = persistEditor(editor)
+    const result = await persistEditor(editor)
     if (!result.ok) {
       setEditError(true)
       return
@@ -275,10 +275,10 @@ export function DataManagementScreen() {
     setEditor(null)
   }
 
-  const runDelete = () => {
+  const runDelete = async () => {
     if (!deleteFlow || deleteFlow.step !== "confirm") return
     const pending = deleteFlow
-    const result = persistDelete(pending.kind, pending.id)
+    const result = await persistDelete(pending.kind, pending.id)
     if (!result.ok) {
       const reason = "reason" in result ? result.reason : "not-found"
       setDeleteFlow({ step: "blocked", kind: pending.kind, id: pending.id, reason })
@@ -532,14 +532,12 @@ function EntityList({
     )
     const rows: TableRow[] = items.map((item, index) => ({
       id: item.id,
-      cells: [String(index + 1), item.name, findCompany(db, item.companyId)?.name ?? "—"],
-      onEdit: () =>
-        onEdit({ kind: "customer", id: item.id, name: item.name, companyId: item.companyId }),
+      cells: [String(index + 1), item.name],
+      onEdit: () => onEdit({ kind: "customer", id: item.id, name: item.name }),
       onDelete: () => onDelete(tab, item.id),
     }))
     const navItems: OrgNavItem[] = items.map((item) => {
       const diariesCount = countDiaries(db, tab, item.id)
-      const companyName = findCompany(db, item.companyId)?.name ?? "—"
       return {
         id: item.id,
         kind: "customer",
@@ -547,11 +545,9 @@ function EntityList({
         meta: String(diariesCount),
         details: [
           { label: he.manager.organization.name, value: item.name },
-          { label: he.manager.organization.company, value: companyName },
           { label: he.manager.organization.diariesCount, value: String(diariesCount) },
         ],
-        onEdit: () =>
-          onEdit({ kind: "customer", id: item.id, name: item.name, companyId: item.companyId }),
+        onEdit: () => onEdit({ kind: "customer", id: item.id, name: item.name }),
         onDelete: () => onDelete(tab, item.id),
       }
     })
@@ -564,7 +560,6 @@ function EntityList({
           headers={[
             he.manager.organization.index,
             he.manager.organization.name,
-            he.manager.organization.company,
             he.manager.edit,
             he.manager.organization.delete,
           ]}
@@ -1332,23 +1327,13 @@ function EditorForm({
             </EditorField>
           ) : null}
           {editor.kind === "customer" ? (
-            <>
-              <EditorField icon={Users} label={he.manager.organization.name}>
-                <Input
-                  value={editor.name}
-                  className={editorInputClass}
-                  onChange={(event) => onChange({ ...editor, name: event.target.value })}
-                />
-              </EditorField>
-              <EditorField icon={Building2} label={he.manager.organization.company}>
-                <OrgSelect
-                  value={editor.companyId}
-                  placeholder={he.manager.organization.company}
-                  options={companyOptions(db, false)}
-                  onValueChange={(companyId) => onChange({ ...editor, companyId })}
-                />
-              </EditorField>
-            </>
+            <EditorField icon={Users} label={he.manager.organization.name}>
+              <Input
+                value={editor.name}
+                className={editorInputClass}
+                onChange={(event) => onChange({ ...editor, name: event.target.value })}
+              />
+            </EditorField>
           ) : null}
           {editor.kind === "site" ? (
             <>
@@ -1472,10 +1457,9 @@ function EditorForm({
 }
 
 function createBlank(tab: TabId, db: MockDb | null): Editor {
-  const defaultCompanyId = db?.companies[0]?.id ?? ""
   const defaultCustomerId = db?.customers[0]?.id ?? ""
   if (tab === "companies") return { kind: "company", id: null, name: "" }
-  if (tab === "customers") return { kind: "customer", id: null, name: "", companyId: defaultCompanyId }
+  if (tab === "customers") return { kind: "customer", id: null, name: "" }
   if (tab === "sites") return { kind: "site", id: null, name: "", customerId: defaultCustomerId }
   if (tab === "technicians") {
     return { kind: "technician", id: null, fullName: "", phone: "" }
@@ -1501,7 +1485,7 @@ function createBlank(tab: TabId, db: MockDb | null): Editor {
 function persistEditor(editor: Editor) {
   if (editor.kind === "company") return saveManagerCompany(editor.id, editor.name)
   if (editor.kind === "customer") {
-    return saveManagerCustomer(editor.id, { name: editor.name, companyId: editor.companyId })
+    return saveManagerCustomer(editor.id, { name: editor.name })
   }
   if (editor.kind === "site") {
     return saveManagerSite(editor.id, { name: editor.name, customerId: editor.customerId })

@@ -491,6 +491,10 @@ export type Database = {
         Args: { p_diary_id: string }
         Returns: Database["public"]["Tables"]["work_diaries"]["Row"]
       }
+      reopen_work_diary_for_signature: {
+        Args: { p_diary_id: string }
+        Returns: Database["public"]["Tables"]["work_diaries"]["Row"]
+      }
       app_current_profile_ids: {
         Args: Record<string, never>
         Returns: string[]

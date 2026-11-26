@@ -305,16 +305,16 @@ function DiaryBody({
     root.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" })
   }, [showMissing, highlightedMissing])
 
-  const runConfirm = () => {
+  const runConfirm = async () => {
     if (confirm === "delete") {
-      const result = deleteManagerDiary(diary.id)
+      const result = await deleteManagerDiary(diary.id)
       if (!result.ok) return
       notice.show(he.manager.panel.deleted)
       onClose()
       return
     }
     if (confirm === "submit") {
-      const result = markManagerDiarySubmitted(diary.id)
+      const result = await markManagerDiarySubmitted(diary.id)
       setConfirm(null)
       if (!result.ok) {
         setShowMissing(true)
@@ -324,13 +324,13 @@ function DiaryBody({
       notice.success(he.manager.panel.submitted)
       return
     }
-    const result = markManagerDiaryCancelled(diary.id)
+    const result = await markManagerDiaryCancelled(diary.id)
     setConfirm(null)
     if (!result.ok) return
     notice.show(he.manager.panel.cancelled)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!draft) return
     const parsedItems: { id: string; componentId: string; quantity: number }[] = []
     for (const item of draft.items) {
@@ -342,7 +342,7 @@ function DiaryBody({
       }
       parsedItems.push({ id: item.id, componentId: item.componentId, quantity: parsed })
     }
-    const result = editManagerDiary(
+    const result = await editManagerDiary(
       diary.id,
       {
         teamLeaderId: draft.teamLeaderId,
@@ -427,14 +427,16 @@ function DiaryBody({
             icon: Files,
             onClick: () =>
               runAction(() => {
-                const result = duplicateManagerDiary(diary.id)
-                if (!result.ok) {
-                  toast.error(he.manager.panel.duplicateFailed)
-                  return
-                }
-                toast.success(he.manager.created)
-                onClose()
-                router.push("/manager")
+                void (async () => {
+                  const result = await duplicateManagerDiary(diary.id)
+                  if (!result.ok) {
+                    toast.error(he.manager.panel.duplicateFailed)
+                    return
+                  }
+                  toast.success(he.manager.created)
+                  onClose()
+                  router.push("/manager")
+                })()
               }),
           },
         ]
@@ -465,12 +467,14 @@ function DiaryBody({
             icon: PenLine,
             onClick: () =>
               runAction(() => {
-                const result = reopenManagerDiaryForSignature(diary.id)
-                if (!result.ok) {
-                  notice.error(he.manager.panel.signatureCaptureFailed)
-                  return
-                }
-                notice.success(he.manager.panel.signatureCaptureDone)
+                void (async () => {
+                  const result = await reopenManagerDiaryForSignature(diary.id)
+                  if (!result.ok) {
+                    notice.error(he.manager.panel.signatureCaptureFailed)
+                    return
+                  }
+                  notice.success(he.manager.panel.signatureCaptureDone)
+                })()
               }),
           },
         ]
