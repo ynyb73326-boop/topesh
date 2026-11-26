@@ -8,20 +8,32 @@ import { usePushSubscription } from "@/features/push/use-push-subscription"
 import { he } from "@/i18n/he"
 import { toast } from "sonner"
 
-const DISMISS_KEY = "topesh:push-prompt-dismissed"
+function dismissKey(userId: string) {
+  return `topesh:push-prompt-dismissed:${userId}`
+}
 
 export function PushPromptBanner() {
   const hydrated = useHasHydrated()
   const session = useDevSession()
   const push = usePushSubscription()
   const [open, setOpen] = useState(false)
+  const userId = session.user?.id
 
   useEffect(() => {
-    if (!hydrated || !session.ready || !session.user) return
+    if (!hydrated || !session.ready || !userId) {
+      setOpen(false)
+      return
+    }
     if (!push.ready || !push.configured || !push.supported) return
-    if (push.subscribed || push.permission === "denied") return
+    if (push.subscribed || push.permission === "denied") {
+      setOpen(false)
+      return
+    }
     try {
-      if (window.localStorage.getItem(DISMISS_KEY) === "1") return
+      if (window.localStorage.getItem(dismissKey(userId)) === "1") {
+        setOpen(false)
+        return
+      }
     } catch {
       /* ignore */
     }
@@ -29,7 +41,7 @@ export function PushPromptBanner() {
   }, [
     hydrated,
     session.ready,
-    session.user,
+    userId,
     push.ready,
     push.configured,
     push.supported,
@@ -37,11 +49,11 @@ export function PushPromptBanner() {
     push.permission,
   ])
 
-  if (!open) return null
+  if (!open || !userId) return null
 
   const dismiss = () => {
     try {
-      window.localStorage.setItem(DISMISS_KEY, "1")
+      window.localStorage.setItem(dismissKey(userId), "1")
     } catch {
       /* ignore */
     }
@@ -58,8 +70,9 @@ export function PushPromptBanner() {
       }
       if (result.reason === "denied") toast.error(he.push.denied)
       else if (result.reason === "no-sw") toast.error(he.push.needInstall)
+      else if (result.reason === "save") toast.error(he.push.saveFailed)
       else toast.error(he.push.error)
-      dismiss()
+      // Keep the banner available after a soft failure so the user can retry.
     })()
   }
 

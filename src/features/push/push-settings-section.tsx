@@ -25,6 +25,7 @@ export function PushSettingsSection() {
       }
       if (result.reason === "denied") toast.error(he.push.denied)
       else if (result.reason === "no-sw") toast.error(he.push.needInstall)
+      else if (result.reason === "save") toast.error(he.push.saveFailed)
       else toast.error(he.push.error)
     })()
   }

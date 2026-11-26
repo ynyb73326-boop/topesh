@@ -6,6 +6,7 @@ import { DirectionProvider } from "@/components/ui/direction"
 import { Toaster } from "@/components/ui/sonner"
 import { NavigationDirection } from "@/components/motion/navigation-direction"
 import { DevServiceWorkerCleanup } from "@/components/pwa/dev-sw-cleanup"
+import { RegisterServiceWorker } from "@/components/pwa/register-service-worker"
 import { PwaInstallListener } from "@/components/pwa/use-pwa-install"
 import { DevSessionProvider } from "@/features/dev-role/dev-session"
 import { PushPromptBanner } from "@/features/push/push-prompt-banner"
@@ -18,6 +19,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <DevSessionProvider>
             <DevServiceWorkerCleanup />
+            <RegisterServiceWorker />
             <NavigationDirection />
             {children}
             <PushPromptBanner />

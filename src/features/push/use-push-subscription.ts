@@ -17,13 +17,53 @@ function urlBase64ToUint8Array(base64String: string) {
   return output
 }
 
-async function getReadyRegistration() {
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(`${label}-timeout`)), ms)
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
+async function ensureServiceWorkerRegistration() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null
-  const registration = await navigator.serviceWorker.ready
-  return registration
+
+  let registration = await navigator.serviceWorker.getRegistration()
+  if (!registration) {
+    try {
+      registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" })
+    } catch (error) {
+      console.error("[push] sw register:", error)
+      return null
+    }
+  }
+
+  try {
+    await withTimeout(navigator.serviceWorker.ready, 10000, "sw-ready")
+  } catch (error) {
+    console.error("[push] sw ready:", error)
+    return registration.active || registration.waiting || registration.installing
+      ? registration
+      : null
+  }
+  return navigator.serviceWorker.getRegistration().then((reg) => reg ?? registration)
 }
 
 export type PushPermissionState = NotificationPermission | "unsupported"
+export type PushEnableResult =
+  | { ok: true }
+  | {
+      ok: false
+      reason: "not-configured" | "denied" | "no-sw" | "invalid" | "save" | "error"
+    }
 
 export function usePushSubscription() {
   const [supported, setSupported] = useState(false)
@@ -42,6 +82,8 @@ export function usePushSubscription() {
     setSupported(hasApi)
     if (!hasApi) {
       setPermission("unsupported")
+      setConfigured(false)
+      setSubscribed(false)
       setReady(true)
       return
     }
@@ -53,9 +95,31 @@ export function usePushSubscription() {
     ])
     setConfigured(keyResult.ok || status.configured)
 
-    const registration = await getReadyRegistration()
-    const local = registration ? await registration.pushManager.getSubscription() : null
-    setSubscribed(Boolean(local) || status.subscribed)
+    // Server row is required for outbound pushes. If the browser already has a
+    // local subscription but the DB does not, re-upsert it now.
+    try {
+      const registration = await navigator.serviceWorker.getRegistration()
+      const local = registration ? await registration.pushManager.getSubscription() : null
+      if (local && !status.subscribed && keyResult.ok) {
+        const json = local.toJSON()
+        if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+          const saved = await subscribePushAction({
+            endpoint: json.endpoint,
+            p256dh: json.keys.p256dh,
+            auth: json.keys.auth,
+            userAgent: navigator.userAgent,
+          })
+          if (saved.ok) {
+            setSubscribed(true)
+            setReady(true)
+            return
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[push] resync:", error)
+    }
+    setSubscribed(status.subscribed)
     setReady(true)
   }, [])
 
@@ -63,22 +127,30 @@ export function usePushSubscription() {
     void refresh()
   }, [refresh])
 
-  const enable = useCallback(async () => {
+  const enable = useCallback(async (): Promise<PushEnableResult> => {
     setBusy(true)
     try {
       const keyResult = await getPushPublicKeyAction()
-      if (!keyResult.ok) return { ok: false as const, reason: "not-configured" as const }
+      if (!keyResult.ok) return { ok: false, reason: "not-configured" }
 
       const permissionResult = await Notification.requestPermission()
       setPermission(permissionResult)
       if (permissionResult !== "granted") {
-        return { ok: false as const, reason: "denied" as const }
+        return { ok: false, reason: "denied" }
       }
 
-      const registration = await getReadyRegistration()
-      if (!registration) return { ok: false as const, reason: "no-sw" as const }
+      const registration = await ensureServiceWorkerRegistration()
+      if (!registration?.pushManager) return { ok: false, reason: "no-sw" }
 
       let subscription = await registration.pushManager.getSubscription()
+      if (subscription) {
+        // Re-subscribe if keys are missing from a stale subscription.
+        const existing = subscription.toJSON()
+        if (!existing.keys?.p256dh || !existing.keys?.auth) {
+          await subscription.unsubscribe()
+          subscription = null
+        }
+      }
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -88,7 +160,7 @@ export function usePushSubscription() {
 
       const json = subscription.toJSON()
       if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
-        return { ok: false as const, reason: "invalid" as const }
+        return { ok: false, reason: "invalid" }
       }
 
       const saved = await subscribePushAction({
@@ -97,12 +169,15 @@ export function usePushSubscription() {
         auth: json.keys.auth,
         userAgent: navigator.userAgent,
       })
-      if (!saved.ok) return { ok: false as const, reason: "save" as const }
+      if (!saved.ok) {
+        console.error("[push] save failed:", saved.error)
+        return { ok: false, reason: "save" }
+      }
       setSubscribed(true)
-      return { ok: true as const }
+      return { ok: true }
     } catch (error) {
       console.error("[push] enable:", error)
-      return { ok: false as const, reason: "error" as const }
+      return { ok: false, reason: "error" }
     } finally {
       setBusy(false)
       void refresh()
@@ -112,7 +187,7 @@ export function usePushSubscription() {
   const disable = useCallback(async () => {
     setBusy(true)
     try {
-      const registration = await getReadyRegistration()
+      const registration = await navigator.serviceWorker.getRegistration()
       const subscription = registration ? await registration.pushManager.getSubscription() : null
       if (subscription) {
         await unsubscribePushAction(subscription.endpoint)
