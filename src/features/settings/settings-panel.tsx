@@ -19,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { InstallSettingsSection } from "@/components/pwa/install-settings-section"
+import { PushSettingsSection } from "@/features/push/push-settings-section"
 import { useDevSession } from "@/features/dev-role/dev-session"
 import { devRoleSwitcherEnabled } from "@/features/dev-role/users"
 import { ThemeModePicker } from "@/features/theme/theme-toggle"
@@ -147,6 +148,8 @@ export function SettingsBody({
         </div>
         <ThemeModePicker />
       </section>
+
+      <PushSettingsSection />
 
       <InstallSettingsSection />
 

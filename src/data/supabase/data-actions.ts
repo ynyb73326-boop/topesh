@@ -15,10 +15,34 @@ import type {
 } from "@/data/manager"
 import type { DiaryDraft } from "@/data/repository"
 import { diaryReadyToSubmit, getManagerDiary } from "@/data/manager"
+import {
+  notifyManagersDiarySubmitted,
+  notifyTeamLeaderNewDiary,
+} from "@/data/push/send"
 
 export type MutateResult =
   | { ok: true; id?: string }
   | { ok: false; reason?: string }
+
+function fireAndForget(task: Promise<unknown>) {
+  void task.catch((error) => console.error("[push] notify failed:", error))
+}
+
+async function customerNameForDiary(diaryId: string) {
+  const admin = createServiceSupabaseClient()
+  const { data: diary } = await admin
+    .from("work_diaries")
+    .select("customer_id")
+    .eq("id", diaryId)
+    .maybeSingle()
+  if (!diary?.customer_id) return ""
+  const { data: customer } = await admin
+    .from("customers")
+    .select("name")
+    .eq("id", diary.customer_id)
+    .maybeSingle()
+  return customer?.name?.trim() || ""
+}
 
 export async function fetchAppSnapshotAction(): Promise<
   { ok: true; db: MockDb } | { ok: false }
@@ -52,7 +76,7 @@ export async function createDiaryAction(
   input: DiaryAssignmentInput
 ): Promise<MutateResult> {
   try {
-    await requireManager()
+    const { user } = await requireManager()
     const admin = createServiceSupabaseClient()
     const id = randomUUID()
     const { error } = await admin.from("work_diaries").insert({
@@ -71,6 +95,12 @@ export async function createDiaryAction(
       signature_capture_only: false,
     })
     if (error) return { ok: false, reason: error.message }
+    fireAndForget(
+      notifyTeamLeaderNewDiary({
+        teamLeaderId: input.teamLeaderId,
+        managerName: user.fullName,
+      })
+    )
     return { ok: true, id }
   } catch {
     return { ok: false }
@@ -251,6 +281,12 @@ export async function submitDiaryAction(diaryId: string): Promise<MutateResult> 
     const admin = createServiceSupabaseClient()
     const { error } = await admin.rpc("submit_work_diary", { p_diary_id: diaryId })
     if (error) return { ok: false, reason: error.message }
+    fireAndForget(
+      notifyManagersDiarySubmitted({
+        teamLeaderName: detail.teamLeaderName,
+        customerName: detail.customerName,
+      })
+    )
     return { ok: true }
   } catch {
     return { ok: false }
@@ -273,7 +309,7 @@ export async function reopenDiaryForSignatureAction(diaryId: string): Promise<Mu
 
 export async function duplicateDiaryAction(diaryId: string): Promise<MutateResult> {
   try {
-    await requireManager()
+    const { user } = await requireManager()
     const admin = createServiceSupabaseClient()
     const { data: current, error } = await admin
       .from("work_diaries")
@@ -299,6 +335,12 @@ export async function duplicateDiaryAction(diaryId: string): Promise<MutateResul
       signature_capture_only: false,
     })
     if (insertError) return { ok: false, reason: insertError.message }
+    fireAndForget(
+      notifyTeamLeaderNewDiary({
+        teamLeaderId: current.team_leader_id,
+        managerName: user.fullName,
+      })
+    )
     return { ok: true, id }
   } catch {
     return { ok: false }
@@ -691,6 +733,13 @@ export async function submitLeaderDiaryAction(
     const admin = createServiceSupabaseClient()
     const { error } = await admin.rpc("submit_work_diary", { p_diary_id: diaryId })
     if (error) return { ok: false, reason: error.message }
+    const customerName = await customerNameForDiary(diaryId)
+    fireAndForget(
+      notifyManagersDiarySubmitted({
+        teamLeaderName: user.fullName,
+        customerName,
+      })
+    )
     return { ok: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : "submit-failed"

@@ -10,6 +10,10 @@ Runtime data now loads from Supabase via server actions + service role (RLS rema
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Anon key — **unsafe for data** until Auth + allow policies (Phase 5E). RLS denies all business rows in 5A. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **no** | Server-only. Never commit. Never `NEXT_PUBLIC_*`. |
 | `DATA_BACKEND` | optional | Prefer `supabase`. Legacy `mock` is unused by the live UI path. |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | yes | Web Push public VAPID key |
+| `VAPID_PRIVATE_KEY` | **no** | Web Push private VAPID key |
+| `VAPID_SUBJECT` | **no** | e.g. `mailto:you@example.com` |
+| `CRON_SECRET` | **no** | Bearer token for `/api/cron/pending-diary-reminders` |
 
 Use separate Supabase projects for local / preview / production. Do not apply unreviewed migrations to production.
 
