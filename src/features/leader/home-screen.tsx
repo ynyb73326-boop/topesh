@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { CalendarDays, Filter, Search, X, type LucideIcon } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { AnimatedMetricNumber } from "@/components/motion/animated-metric-number"
 import { PageFrame } from "@/components/motion/page-frame"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -118,19 +119,19 @@ export function LeaderHomeScreen() {
     {
       key: "submitted",
       label: he.leader.home.submittedTotal,
-      value: loading ? "—" : submittedCount,
+      value: loading ? 0 : submittedCount,
       dot: "bg-emerald-500",
     },
     {
       key: "pending",
       label: he.leader.home.pendingTotal,
-      value: loading ? "—" : pendingCount,
+      value: loading ? 0 : pendingCount,
       dot: "bg-orange-500",
     },
     {
       key: "total",
       label: he.leader.home.diariesTotal,
-      value: loading ? "—" : totalCount,
+      value: loading ? 0 : totalCount,
       dot: "bg-zinc-500",
     },
   ] as const
@@ -163,8 +164,8 @@ export function LeaderHomeScreen() {
                 <span className={cn("size-1.5 shrink-0 rounded-full", card.dot)} aria-hidden />
                 <span>{card.label}</span>
               </p>
-              <p className="flex min-h-0 flex-1 items-center justify-center text-4xl font-semibold tabular-nums tracking-tight text-foreground sm:text-5xl">
-                {card.value}
+              <p className="flex min-h-0 flex-1 items-center justify-center text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
+                <AnimatedMetricNumber value={card.value} loading={loading} />
               </p>
             </div>
           ))}

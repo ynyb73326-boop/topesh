@@ -11,6 +11,7 @@ export function PushSettingsSection() {
 
   const locked =
     !push.ready ||
+    !push.statusKnown ||
     push.busy ||
     !push.supported ||
     push.localOnly ||
@@ -22,9 +23,11 @@ export function PushSettingsSection() {
       ? he.push.localOnly
       : push.permission === "denied"
         ? he.push.denied
-        : push.subscribed
-          ? he.push.enabledHint
-          : he.push.enableHint
+        : !push.statusKnown
+          ? he.push.enableHint
+          : push.subscribed
+            ? he.push.enabledHint
+            : he.push.enableHint
 
   const onCheckedChange = (checked: boolean) => {
     if (locked) return
@@ -55,12 +58,19 @@ export function PushSettingsSection() {
           <p className="text-sm font-semibold tracking-tight">{he.push.title}</p>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">{hint}</p>
         </div>
-        <Switch
-          checked={push.subscribed}
-          disabled={locked}
-          onCheckedChange={onCheckedChange}
-          aria-label={he.push.title}
-        />
+        {push.statusKnown ? (
+          <Switch
+            checked={push.subscribed}
+            disabled={locked}
+            onCheckedChange={onCheckedChange}
+            aria-label={he.push.title}
+          />
+        ) : (
+          <span
+            className="inline-block h-7 w-12 shrink-0 rounded-full bg-muted/70"
+            aria-hidden
+          />
+        )}
       </div>
     </section>
   )

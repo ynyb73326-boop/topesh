@@ -6,6 +6,7 @@ import {
   subscribePushAction,
   unsubscribePushAction,
 } from "@/data/push/actions"
+import { useDevSession } from "@/features/dev-role/dev-session"
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
@@ -34,6 +35,31 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
 
 function getClientVapidPublicKey() {
   return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim() || null
+}
+
+function pushCacheKey(userId: string) {
+  return `topesh:push-subscribed:${userId}`
+}
+
+function readCachedSubscribed(userId: string | undefined): boolean | null {
+  if (!userId || typeof window === "undefined") return null
+  try {
+    const value = window.localStorage.getItem(pushCacheKey(userId))
+    if (value === "1") return true
+    if (value === "0") return false
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+function writeCachedSubscribed(userId: string | undefined, value: boolean) {
+  if (!userId || typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(pushCacheKey(userId), value ? "1" : "0")
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Push SW is not registered under `next dev` (Serwist + DevServiceWorkerCleanup). */
@@ -81,13 +107,31 @@ export type PushEnableResult =
     }
 
 export function usePushSubscription() {
+  const session = useDevSession()
+  const userId = session.user?.id
+
   const [supported, setSupported] = useState(false)
   const [configured, setConfigured] = useState(() => Boolean(getClientVapidPublicKey()))
   const [permission, setPermission] = useState<PushPermissionState>("default")
   const [subscribed, setSubscribed] = useState(false)
+  const [statusKnown, setStatusKnown] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ready, setReady] = useState(false)
   const [localOnly, setLocalOnly] = useState(false)
+
+  const applySubscribed = useCallback((value: boolean, user = userId) => {
+    setSubscribed(value)
+    setStatusKnown(true)
+    writeCachedSubscribed(user, value)
+  }, [userId])
+
+  // Instant paint from last known state for this user (avoids off→on flash).
+  useEffect(() => {
+    const cached = readCachedSubscribed(userId)
+    if (cached == null) return
+    setSubscribed(cached)
+    setStatusKnown(true)
+  }, [userId])
 
   const refresh = useCallback(async () => {
     const publicKey = getClientVapidPublicKey()
@@ -103,26 +147,35 @@ export function usePushSubscription() {
 
     if (!hasApi) {
       setPermission("unsupported")
-      setSubscribed(false)
+      applySubscribed(false)
       setReady(true)
       return
     }
 
     setPermission(Notification.permission)
-    // Paint the settings row immediately; hydrate subscription state in the background.
     setReady(true)
+
+    let local: PushSubscription | null = null
+    try {
+      const registration = await navigator.serviceWorker.getRegistration()
+      local = registration ? await registration.pushManager.getSubscription() : null
+      if (local) {
+        // Local SW is the source of truth for "on this device" — paint before server.
+        applySubscribed(true)
+      }
+    } catch (error) {
+      console.error("[push] local subscription:", error)
+    }
 
     try {
       const status = await getPushSubscriptionStatusAction()
       if (!publicKey && !status.configured) {
         setConfigured(false)
-        setSubscribed(false)
+        applySubscribed(false)
         return
       }
       setConfigured(Boolean(publicKey) || status.configured)
 
-      const registration = await navigator.serviceWorker.getRegistration()
-      const local = registration ? await registration.pushManager.getSubscription() : null
       if (local && !status.subscribed && publicKey) {
         const json = local.toJSON()
         if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
@@ -133,20 +186,28 @@ export function usePushSubscription() {
             userAgent: navigator.userAgent,
           })
           if (saved.ok) {
-            setSubscribed(true)
+            applySubscribed(true)
             return
           }
         }
       }
-      setSubscribed(status.subscribed)
+
+      // Prefer local presence; otherwise trust server row for this profile.
+      applySubscribed(Boolean(local) || status.subscribed)
     } catch (error) {
       console.error("[push] refresh:", error)
+      if (!local) {
+        const cached = readCachedSubscribed(userId)
+        if (cached != null) applySubscribed(cached)
+        else setStatusKnown(true)
+      }
     }
-  }, [])
+  }, [applySubscribed, userId])
 
   useEffect(() => {
+    if (!session.ready) return
     void refresh()
-  }, [refresh])
+  }, [refresh, session.ready, userId])
 
   const enable = useCallback(async (): Promise<PushEnableResult> => {
     setBusy(true)
@@ -195,7 +256,7 @@ export function usePushSubscription() {
         console.error("[push] save failed:", saved.error)
         return { ok: false, reason: "save" }
       }
-      setSubscribed(true)
+      applySubscribed(true)
       return { ok: true }
     } catch (error) {
       console.error("[push] enable:", error)
@@ -204,7 +265,7 @@ export function usePushSubscription() {
       setBusy(false)
       void refresh()
     }
-  }, [refresh])
+  }, [applySubscribed, refresh])
 
   const disable = useCallback(async () => {
     setBusy(true)
@@ -215,7 +276,7 @@ export function usePushSubscription() {
         await unsubscribePushAction(subscription.endpoint)
         await subscription.unsubscribe()
       }
-      setSubscribed(false)
+      applySubscribed(false)
       return { ok: true as const }
     } catch (error) {
       console.error("[push] disable:", error)
@@ -224,10 +285,11 @@ export function usePushSubscription() {
       setBusy(false)
       void refresh()
     }
-  }, [refresh])
+  }, [applySubscribed, refresh])
 
   return {
     ready,
+    statusKnown,
     supported,
     configured,
     permission,

@@ -24,7 +24,7 @@ export function PushPromptBanner() {
       setOpen(false)
       return
     }
-    if (!push.ready || !push.configured || !push.supported || push.localOnly) {
+    if (!push.ready || !push.statusKnown || !push.configured || !push.supported || push.localOnly) {
       setOpen(false)
       return
     }
@@ -46,6 +46,7 @@ export function PushPromptBanner() {
     session.ready,
     userId,
     push.ready,
+    push.statusKnown,
     push.configured,
     push.supported,
     push.localOnly,

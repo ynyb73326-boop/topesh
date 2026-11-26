@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { AnimatedMetricNumber } from "@/components/motion/animated-metric-number"
 import { PageFrame } from "@/components/motion/page-frame"
 import { Button } from "@/components/ui/button"
 import {
@@ -129,25 +130,25 @@ export function DashboardScreen() {
       key: "createdToday",
       label: metrics.createdToday.label,
       hint: metrics.createdToday.hint,
-      value: loading ? "—" : all.filter((diary) => jerusalemDay(diary.createdAt) === today).length,
+      value: loading ? 0 : all.filter((diary) => jerusalemDay(diary.createdAt) === today).length,
     },
     {
       key: "pending",
       label: metrics.pending.label,
       hint: metrics.pending.hint,
-      value: loading ? "—" : all.filter((diary) => diary.status === "pending").length,
+      value: loading ? 0 : all.filter((diary) => diary.status === "pending").length,
     },
     {
       key: "submitted",
       label: metrics.submitted.label,
       hint: metrics.submitted.hint,
-      value: loading ? "—" : all.filter((diary) => diary.status === "submitted").length,
+      value: loading ? 0 : all.filter((diary) => diary.status === "submitted").length,
     },
     {
       key: "total",
       label: metrics.total.label,
       hint: metrics.total.hint,
-      value: loading ? "—" : all.length,
+      value: loading ? 0 : all.length,
     },
   ] as const
   const datePreset =
@@ -191,7 +192,8 @@ export function DashboardScreen() {
   const options = workDiarySearchOptions(db, toOrgSearchFilters(appliedAdvanced))
   const draftOptions = workDiarySearchOptions(db, toOrgSearchFilters(draftFilters))
   const hasActiveSheetFilters = Boolean(
-    workDate ||
+    search.trim() ||
+      workDate ||
       companyIds.length > 0 ||
       customerIds.length > 0 ||
       siteIds.length > 0 ||
@@ -256,7 +258,8 @@ export function DashboardScreen() {
   }
 
   const clearSheetFilters = () => {
-    if (quickFilter === "month" || quickFilter === "cancelled") setQuickFilter("all")
+    if (quickFilter !== "all") setQuickFilter("all")
+    setSearch("")
     setWorkDate("")
     setCompanyIds([])
     setCustomerIds([])
@@ -305,8 +308,8 @@ export function DashboardScreen() {
               className="flex flex-col gap-2 rounded-md border border-border bg-card px-3.5 py-3 lg:gap-3 lg:px-4 lg:py-3.5"
             >
               <p className="text-sm text-muted-foreground">{card.label}</p>
-              <p className="text-start text-2xl font-semibold tabular-nums tracking-tight text-foreground lg:text-3xl">
-                {card.value}
+              <p className="text-start text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
+                <AnimatedMetricNumber value={card.value} loading={loading} />
               </p>
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
@@ -372,7 +375,7 @@ export function DashboardScreen() {
         </div>
 
         <section className="hidden overflow-x-auto rounded-md border border-border bg-muted/40 px-4 py-4 sm:px-5 lg:block">
-          <div className="grid min-w-[56rem] grid-cols-6 gap-3">
+          <div className="grid min-w-[64rem] grid-cols-[repeat(6,minmax(0,1fr))_auto] items-end gap-3">
             <FilterField label={he.manager.dashboard.searchFree} icon={Search}>
               <Input
                 value={search}
@@ -421,6 +424,16 @@ export function DashboardScreen() {
                 onValuesChange={(next) => patchFilters({ teamLeaderIds: next })}
               />
             </FilterField>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!hasActiveSheetFilters}
+              className="h-[calc(2.25rem*1.1*1.1)] shrink-0 gap-1.5 rounded-md px-3 text-xs"
+              onClick={clearSheetFilters}
+            >
+              <X className="size-3.5" aria-hidden />
+              {he.manager.dashboard.reset}
+            </Button>
           </div>
         </section>
         <DiaryTable
