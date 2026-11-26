@@ -1,6 +1,6 @@
 import "server-only"
 
-import webpush from "web-push"
+import * as webpush from "web-push"
 import { createServiceSupabaseClient } from "@/data/supabase/server"
 import { getVapidPrivateKey, getVapidPublicKey, getVapidSubject, isPushConfigured } from "@/data/push/env"
 
