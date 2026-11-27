@@ -159,13 +159,15 @@ export function usePushSubscription() {
     try {
       const registration = await navigator.serviceWorker.getRegistration()
       local = registration ? await registration.pushManager.getSubscription() : null
-      if (local) {
-        // Local SW is the source of truth for "on this device" — paint before server.
-        applySubscribed(true)
-      }
     } catch (error) {
       console.error("[push] local subscription:", error)
     }
+
+    // Only a live PushManager subscription on THIS device means "on".
+    // Server rows / localStorage alone must not keep the switch enabled —
+    // that made both desktop and mobile look subscribed after SW/cache churn
+    // while nothing could actually receive pushes here.
+    applySubscribed(Boolean(local))
 
     try {
       const status = await getPushSubscriptionStatusAction()
@@ -185,24 +187,16 @@ export function usePushSubscription() {
             auth: json.keys.auth,
             userAgent: navigator.userAgent,
           })
-          if (saved.ok) {
-            applySubscribed(true)
-            return
+          if (!saved.ok) {
+            console.error("[push] resync save failed:", saved.error)
           }
         }
       }
-
-      // Prefer local presence; otherwise trust server row for this profile.
-      applySubscribed(Boolean(local) || status.subscribed)
     } catch (error) {
       console.error("[push] refresh:", error)
-      if (!local) {
-        const cached = readCachedSubscribed(userId)
-        if (cached != null) applySubscribed(cached)
-        else setStatusKnown(true)
-      }
+      setStatusKnown(true)
     }
-  }, [applySubscribed, userId])
+  }, [applySubscribed])
 
   useEffect(() => {
     if (!session.ready) return
@@ -273,8 +267,12 @@ export function usePushSubscription() {
       const registration = await navigator.serviceWorker.getRegistration()
       const subscription = registration ? await registration.pushManager.getSubscription() : null
       if (subscription) {
-        await unsubscribePushAction(subscription.endpoint)
-        await subscription.unsubscribe()
+        const endpoint = subscription.endpoint
+        try {
+          await subscription.unsubscribe()
+        } finally {
+          await unsubscribePushAction(endpoint)
+        }
       }
       applySubscribed(false)
       return { ok: true as const }
