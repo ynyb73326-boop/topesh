@@ -350,10 +350,16 @@ export function DataManagementScreen() {
                   <span
                     className={cn(
                       "inline-flex size-9 items-center justify-center rounded-full lg:size-7",
-                      selected ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                      selected
+                        ? "bg-primary text-white [&_svg]:stroke-white"
+                        : "bg-muted text-foreground"
                     )}
                   >
-                    <Icon className="size-4 lg:size-3.5" aria-hidden />
+                    <Icon
+                      className="size-4 lg:size-3.5"
+                      color={selected ? "#ffffff" : undefined}
+                      aria-hidden
+                    />
                   </span>
                   <span className="text-sm font-medium leading-tight lg:text-xs">{item.label}</span>
                 </button>

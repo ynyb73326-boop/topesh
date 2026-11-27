@@ -40,8 +40,8 @@ function ManagerBottomNav() {
         >
           {/* Same icon footprint as sibling tabs so the label shares their baseline. */}
           <span className="relative size-5 shrink-0" aria-hidden>
-            <span className="absolute left-1/2 top-1/2 flex size-12 -translate-x-1/2 -translate-y-[calc(50%+1.05rem)] items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_6px_16px_rgb(255_51_0_/0.35)] ring-4 ring-background">
-              <Plus className="size-6" strokeWidth={2.5} />
+            <span className="absolute left-1/2 top-1/2 flex size-12 -translate-x-1/2 -translate-y-[calc(50%+1.05rem)] items-center justify-center overflow-visible rounded-full bg-primary text-white shadow-[0_6px_16px_rgb(255_51_0_/0.35)] ring-4 ring-background">
+              <Plus className="size-6 text-white" color="#ffffff" strokeWidth={2.5} aria-hidden />
             </span>
           </span>
           <span className="max-w-full truncate">{he.nav.createShort}</span>

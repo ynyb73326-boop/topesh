@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Info,
   Layers3,
+  Loader2,
   MapPin,
   MessageSquareText,
   PenLine,
@@ -192,17 +193,20 @@ function DiaryEditor({
   }
 
   const openReview = () => {
+    if (submitting) return
     if (timerRef.current) window.clearTimeout(timerRef.current)
-    void saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
     dirtyRef.current = false
     setSubmitError(false)
     setReviewOpen(true)
+    // Persist draft in the background; submit always sends the latest local draft.
+    void saveLeaderDraft(teamLeaderId, detail.id, draftRef.current)
   }
 
   const confirmSubmit = async () => {
     if (submitting) return
     setSubmitting(true)
     dirtyRef.current = false
+    if (timerRef.current) window.clearTimeout(timerRef.current)
     try {
       const result = await withSavingToast(
         () => submitLeaderDiary(teamLeaderId, detail.id, draftRef.current),
@@ -376,7 +380,12 @@ function DiaryEditor({
 
       {overlayOpen ? null : (
         <div className="shrink-0 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <Button type="button" size="touch" className="w-full" onClick={openReview}>
+          <Button
+            type="button"
+            size="touch"
+            className="w-full touch-manipulation"
+            onClick={openReview}
+          >
             {he.leader.form.submit}
           </Button>
         </div>
@@ -1148,7 +1157,10 @@ function ReviewSheet({
       open={open}
       title={he.leader.review.title}
       showClose={false}
-      onClose={() => onOpenChange(false)}
+      onClose={() => {
+        if (submitting) return
+        onOpenChange(false)
+      }}
       footer={
         <div className="flex shrink-0 flex-col gap-2 border-t border-border px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <p className="text-sm leading-6 text-muted-foreground">{he.leader.review.warning}</p>
@@ -1158,19 +1170,34 @@ function ReviewSheet({
           <Button
             type="button"
             size="touch"
-            className="w-full"
+            className="w-full touch-manipulation"
             disabled={submitting}
-            onClick={onConfirm}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onConfirm()
+            }}
           >
-            {submitting ? he.feedback.submitting : he.leader.review.confirm}
+            {submitting ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                {he.feedback.submitting}
+              </span>
+            ) : (
+              he.leader.review.confirm
+            )}
           </Button>
           <Button
             type="button"
             size="touch"
             variant="outline"
-            className="w-full"
+            className="w-full touch-manipulation"
             disabled={submitting}
-            onClick={() => onOpenChange(false)}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenChange(false)
+            }}
           >
             {he.leader.review.cancel}
           </Button>
@@ -1448,7 +1475,7 @@ function SectionDivider() {
 }
 
 const sectionAddClass =
-  "pressable inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none"
+  "pressable inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-white outline-none [&_svg]:text-white [&_svg]:stroke-white"
 
 function FieldLead({ icon: Icon }: { icon: LucideIcon }) {
   return (

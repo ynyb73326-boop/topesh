@@ -38,6 +38,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
           "--width": "fit-content",
+          zIndex: 200,
         } as React.CSSProperties
       }
       toastOptions={{

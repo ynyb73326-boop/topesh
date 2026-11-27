@@ -403,9 +403,31 @@ html:active-view-transition {
   }
 }
 
+/* While a mobile picker/review overlay is open, ignore Drawer gesture capture underneath. */
+body[data-mobile-picker-open] [data-slot="drawer-viewport"],
+body[data-mobile-picker-open] [data-slot="drawer-overlay"] {
+  pointer-events: none !important;
+}
+
+/*
+ * Some mobile WebViews (Samsung/Xiaomi/older Chromium) fail to paint Lucide strokes
+ * when currentColor comes from a CSS variable like --primary-foreground. Force a
+ * concrete white stroke on solid primary chips so icons stay visible on orange.
+ */
+.bg-primary {
+  color: #ffffff;
+}
+.bg-primary svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+  opacity: 1 !important;
+}
+
 /* Sonner: top strip full-width; bubble centered with margin:auto (no transform fight). */
 [data-sonner-toaster].toaster {
   font-family: var(--font-sans) !important;
+  z-index: 200 !important;
 }
 
 [data-sonner-toaster][data-x-position="center"][data-y-position="top"],

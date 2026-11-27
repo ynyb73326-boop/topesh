@@ -53,12 +53,15 @@ export function MobileFilterPicker({
     if (!present) return
     const previous = document.body.style.overflow
     document.body.style.overflow = "hidden"
+    // Stop the underlying mobile Drawer from stealing taps/swipes while this overlay is open.
+    document.body.dataset.mobilePickerOpen = "1"
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => {
       document.body.style.overflow = previous
+      delete document.body.dataset.mobilePickerOpen
       window.removeEventListener("keydown", onKey)
     }
   }, [present, onClose])
@@ -67,7 +70,7 @@ export function MobileFilterPicker({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col justify-end"
+      className="fixed inset-0 z-[80] flex flex-col justify-end"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -76,7 +79,7 @@ export function MobileFilterPicker({
         type="button"
         className={cn(
           "absolute inset-0 bg-[#2B2B2B]/40 backdrop-blur-[16px] transition-opacity duration-200 dark:bg-black/40",
-          visible ? "opacity-100" : "opacity-0"
+          visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         )}
         aria-label={he.close}
         onClick={onClose}
@@ -84,6 +87,7 @@ export function MobileFilterPicker({
       <div
         className={cn(
           "relative z-10 flex max-h-[85vh] flex-col overflow-hidden rounded-t-2xl border-t border-border bg-card text-card-foreground shadow-lg duration-200 ease-out dark:bg-[#16161a]",
+          "pointer-events-auto touch-manipulation",
           "motion-safe:transition-[transform,opacity]",
           visible
             ? "translate-y-0 opacity-100"
