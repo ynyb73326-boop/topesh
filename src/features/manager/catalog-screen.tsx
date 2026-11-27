@@ -177,10 +177,10 @@ export function CatalogScreen() {
     if (!deleteId) return
     const pending = deleteId
     const result = await withSavingToast(
-      () =>
-        pending.kind === "domains"
-          ? deleteManagerDomain(pending.id)
-          : deleteManagerComponent(pending.id),
+      async () => {
+        if (pending.kind === "domains") return deleteManagerDomain(pending.id)
+        return deleteManagerComponent(pending.id)
+      },
       {
         loading: he.feedback.deleting,
         success: he.manager.catalog.delete,
